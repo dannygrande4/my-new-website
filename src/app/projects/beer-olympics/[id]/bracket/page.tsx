@@ -405,11 +405,19 @@ export default function BracketPage({
           <h1 className="mt-6 text-4xl font-bold tracking-tight">
             {tournament.name}
           </h1>
-          <p className="mt-2 text-zinc-500 dark:text-zinc-400">
-            {tournament.status === "completed"
-              ? "Tournament complete!"
-              : "Tap a team name to record the winner."}
-          </p>
+          <div className="mt-2 flex items-center justify-between">
+            <p className="text-zinc-500 dark:text-zinc-400">
+              {tournament.status === "completed"
+                ? "Tournament complete!"
+                : "Tap a team name to record the winner."}
+            </p>
+            <Link
+              href={`/projects/beer-olympics/${id}/scorekeeper`}
+              className="rounded-full border border-zinc-300 px-4 py-1.5 text-sm font-medium transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
+            >
+              Scorekeeper View
+            </Link>
+          </div>
 
           {/* First Round Schedule */}
           {schedule.length > 0 && (
