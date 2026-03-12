@@ -273,7 +273,7 @@ function TeamSlot({
 }) {
   const roundedClass = position === "top" ? "rounded-t-lg" : "rounded-b-lg";
   if (!team) {
-    return <div className={`px-3 py-2 text-xs italic text-zinc-400 ${roundedClass}`}>TBD</div>;
+    return <div className={`px-3 py-2 text-center text-xs text-zinc-400 ${roundedClass}`}>-</div>;
   }
   return (
     <button
