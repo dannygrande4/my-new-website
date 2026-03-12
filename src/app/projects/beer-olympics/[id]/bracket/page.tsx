@@ -491,10 +491,10 @@ function FinalsBracket({
         </div>
 
         {/* Right bracket (flows left, reversed) */}
-        <div className="flex flex-1 flex-row-reverse gap-6">
-          {rightRounds.map((roundMatches, ri) => {
-            const round = ri + 1;
-            const gap = round === 1 ? 16 : Math.pow(2, ri) * 32;
+        <div className="flex flex-1 justify-start gap-6">
+          {[...rightRounds].reverse().map((roundMatches, ri) => {
+            const round = rightRounds.length - ri;
+            const gap = round === 1 ? 16 : Math.pow(2, round - 1) * 32;
             return (
               <div key={`right-${round}`} className="flex flex-col">
                 <p className="mb-3 text-center text-xs font-semibold uppercase tracking-wide text-zinc-400">
