@@ -181,11 +181,11 @@ export default function ScorekeeperPage({
     if (firstPlayableId) break;
   }
 
-  const completedCount = tournament.matches.filter(
-    (m) => m.status === "completed"
-  ).length;
   const realMatchCount = tournament.matches.filter(
     (m) => m.homeTeamId && m.awayTeamId
+  ).length;
+  const completedCount = tournament.matches.filter(
+    (m) => m.status === "completed" && m.homeTeamId && m.awayTeamId
   ).length;
 
   return (
