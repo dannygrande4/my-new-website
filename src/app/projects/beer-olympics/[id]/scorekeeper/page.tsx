@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState, useCallback, use } from "react";
+import { useRouter } from "next/navigation";
 
 interface Team {
   id: string;
@@ -52,6 +53,7 @@ export default function ScorekeeperPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
+  const router = useRouter();
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState<string | null>(null);
@@ -77,6 +79,12 @@ export default function ScorekeeperPage({
     });
     await fetchTournament();
     setSubmitting(null);
+  }
+
+  async function restartTournament() {
+    if (!confirm("Reset this tournament? All match results will be lost.")) return;
+    await fetch(`/api/tournaments/${id}/reset`, { method: "POST" });
+    router.push(`/projects/beer-olympics/${id}`);
   }
 
   if (loading) {
@@ -293,6 +301,14 @@ export default function ScorekeeperPage({
             );
           })}
         </div>
+
+        {/* Restart button (testing) */}
+        <button
+          onClick={restartTournament}
+          className="mt-10 w-full rounded-full border border-red-300 py-2.5 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/20"
+        >
+          Restart Tournament (Testing)
+        </button>
       </div>
     </div>
   );

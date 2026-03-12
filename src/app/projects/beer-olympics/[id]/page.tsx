@@ -119,6 +119,9 @@ export default function TournamentSetup({
       method: "POST",
     });
     if (res.ok) {
+      const data = await res.json();
+      // Store seed orders for the shuffle animation
+      sessionStorage.setItem(`seedOrders-${id}`, JSON.stringify(data.seedOrders));
       router.push(`/projects/beer-olympics/${id}/bracket?animate=true`);
     } else {
       const data = await res.json();

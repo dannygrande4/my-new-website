@@ -10,6 +10,30 @@ function shuffle<T>(array: T[]): T[] {
   return arr;
 }
 
+// Generate a shuffle that avoids repeating first-round matchups from previous games
+function shuffleWithUniqueMatchups<T extends { id: string }>(
+  teams: T[],
+  existingPairings: Set<string>,
+  maxAttempts = 50
+): T[] {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const shuffled = shuffle(teams);
+    let hasDuplicate = false;
+
+    for (let i = 0; i < shuffled.length - 1; i += 2) {
+      const pairKey = [shuffled[i].id, shuffled[i + 1].id].sort().join("-");
+      if (existingPairings.has(pairKey)) {
+        hasDuplicate = true;
+        break;
+      }
+    }
+
+    if (!hasDuplicate) return shuffled;
+  }
+  // Fallback: return a regular shuffle if we can't avoid all duplicates
+  return shuffle(teams);
+}
+
 export async function POST(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -35,12 +59,16 @@ export async function POST(
   }
 
   const teams = tournament.teams;
-  const shuffledTeams = shuffle(teams);
-  const n = shuffledTeams.length;
+  const n = teams.length;
   const totalRounds = Math.ceil(Math.log2(n));
   const bracketSize = Math.pow(2, totalRounds);
 
-  // Build matches for each game
+  // Track pairings across games to ensure unique matchups
+  const usedPairings = new Set<string>();
+
+  // Store per-game seed orders to send to the client for animation
+  const seedOrders: { gameId: string; gameName: string; teams: { id: string; name: string }[] }[] = [];
+
   const allMatchData: {
     tournamentId: string;
     gameId: string;
@@ -54,6 +82,23 @@ export async function POST(
 
   for (const tg of tournament.games) {
     const gameId = tg.gameId;
+
+    // Shuffle with unique matchups per game
+    const shuffledTeams = shuffleWithUniqueMatchups(teams, usedPairings);
+
+    // Record this game's pairings
+    for (let i = 0; i < shuffledTeams.length - 1; i += 2) {
+      const pairKey = [shuffledTeams[i].id, shuffledTeams[i + 1].id]
+        .sort()
+        .join("-");
+      usedPairings.add(pairKey);
+    }
+
+    seedOrders.push({
+      gameId,
+      gameName: tg.game.name,
+      teams: shuffledTeams.map((t) => ({ id: t.id, name: t.name })),
+    });
 
     // Create all match slots for every round
     const gameMatches: typeof allMatchData = [];
@@ -81,14 +126,12 @@ export async function POST(
       round1[i].homeTeamId = homeIdx < n ? shuffledTeams[homeIdx].id : null;
       round1[i].awayTeamId = awayIdx < n ? shuffledTeams[awayIdx].id : null;
 
-      // Handle byes (only one team in match)
       const hasHome = round1[i].homeTeamId !== null;
       const hasAway = round1[i].awayTeamId !== null;
 
       if (hasHome && !hasAway) {
         round1[i].winnerId = round1[i].homeTeamId;
         round1[i].status = "completed";
-        // Advance to next round
         if (totalRounds > 1) {
           const nextPos = Math.floor(i / 2);
           const nextMatch = gameMatches.find(
@@ -109,7 +152,6 @@ export async function POST(
           else nextMatch.awayTeamId = round1[i].awayTeamId;
         }
       } else if (!hasHome && !hasAway) {
-        // Empty match (more byes than needed), mark completed
         round1[i].status = "completed";
       }
     }
@@ -117,7 +159,6 @@ export async function POST(
     allMatchData.push(...gameMatches);
   }
 
-  // Create all matches and update tournament status in a transaction
   await prisma.$transaction([
     prisma.match.createMany({ data: allMatchData }),
     prisma.tournament.update({
@@ -126,7 +167,5 @@ export async function POST(
     }),
   ]);
 
-  return NextResponse.json({
-    seedOrder: shuffledTeams.map((t) => ({ id: t.id, name: t.name })),
-  });
+  return NextResponse.json({ seedOrders });
 }

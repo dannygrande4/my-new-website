@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, useCallback, use } from "react";
+import { useEffect, useState, useCallback, useRef, use } from "react";
 import { useSearchParams } from "next/navigation";
 
 interface Team {
@@ -39,82 +39,179 @@ interface Tournament {
   matches: Match[];
 }
 
-// --- Shuffle Animation Component ---
+interface SeedOrder {
+  gameId: string;
+  gameName: string;
+  teams: { id: string; name: string }[];
+}
 
-function ShuffleAnimation({
-  teams,
+// --- Shuffle Animation: populates brackets game by game ---
+
+function BracketShuffleAnimation({
+  seedOrders,
   onComplete,
 }: {
-  teams: Team[];
+  seedOrders: SeedOrder[];
   onComplete: () => void;
 }) {
-  const [displayOrder, setDisplayOrder] = useState<Team[]>(teams);
-  const [phase, setPhase] = useState<"shuffling" | "locked">("shuffling");
+  const [currentGameIdx, setCurrentGameIdx] = useState(0);
+  const [slots, setSlots] = useState<(string | null)[]>([]);
+  const [phase, setPhase] = useState<"shuffling" | "locked" | "done">(
+    "shuffling"
+  );
+  const completedRef = useRef(false);
 
+  const currentGame = seedOrders[currentGameIdx];
+  const teamCount = currentGame?.teams.length ?? 0;
+  const matchCount = Math.ceil(teamCount / 2);
+
+  // Build the final bracket slots for current game: [home0, away0, home1, away1, ...]
+  const finalSlots = useCallback(() => {
+    if (!currentGame) return [];
+    const result: (string | null)[] = [];
+    for (let i = 0; i < matchCount; i++) {
+      result.push(currentGame.teams[i * 2]?.name ?? null);
+      result.push(currentGame.teams[i * 2 + 1]?.name ?? null);
+    }
+    return result;
+  }, [currentGame, matchCount]);
+
+  // Shuffle phase: rapidly randomize names in bracket slots
   useEffect(() => {
+    if (phase !== "shuffling" || !currentGame) return;
+
+    const allNames = currentGame.teams.map((t) => t.name);
     let count = 0;
-    const maxShuffles = 30;
+    const maxShuffles = 20;
+
+    // Start with empty slots
+    setSlots(Array(matchCount * 2).fill(null));
 
     const interval = setInterval(() => {
       if (count >= maxShuffles) {
         clearInterval(interval);
+        setSlots(finalSlots());
         setPhase("locked");
-        setTimeout(onComplete, 1500);
         return;
       }
-      // Fisher-Yates on display
-      const arr = [...teams];
-      for (let i = arr.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [arr[i], arr[j]] = [arr[j], arr[i]];
+
+      // Random names in each slot
+      const randomized: (string | null)[] = [];
+      const shuffled = [...allNames].sort(() => Math.random() - 0.5);
+      for (let i = 0; i < matchCount * 2; i++) {
+        randomized.push(shuffled[i % shuffled.length]);
       }
-      setDisplayOrder(arr);
+      setSlots(randomized);
       count++;
-    }, 80);
+    }, 70);
 
     return () => clearInterval(interval);
-  }, [teams, onComplete]);
+  }, [phase, currentGame, matchCount, finalSlots]);
 
-  // On "locked" phase, show final seed order
+  // After locking, wait then move to next game or finish
   useEffect(() => {
-    if (phase === "locked") {
-      setDisplayOrder(teams);
-    }
-  }, [phase, teams]);
+    if (phase !== "locked") return;
+
+    const timeout = setTimeout(() => {
+      if (currentGameIdx < seedOrders.length - 1) {
+        setCurrentGameIdx((i) => i + 1);
+        setPhase("shuffling");
+      } else {
+        setPhase("done");
+        if (!completedRef.current) {
+          completedRef.current = true;
+          setTimeout(onComplete, 800);
+        }
+      }
+    }, 1200);
+
+    return () => clearTimeout(timeout);
+  }, [phase, currentGameIdx, seedOrders.length, onComplete]);
+
+  if (!currentGame) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/95 px-6">
-      <h2 className="mb-2 text-2xl font-bold text-white">
-        {phase === "shuffling" ? "Shuffling Teams..." : "Seeded!"}
+      {/* Game progress dots */}
+      <div className="mb-6 flex gap-2">
+        {seedOrders.map((s, i) => (
+          <div
+            key={s.gameId}
+            className={`h-2 w-2 rounded-full transition-all ${
+              i < currentGameIdx
+                ? "bg-emerald-500"
+                : i === currentGameIdx
+                  ? "h-2.5 w-2.5 bg-white"
+                  : "bg-zinc-700"
+            }`}
+          />
+        ))}
+      </div>
+
+      <h2 className="mb-1 text-2xl font-bold text-white">
+        {currentGame.gameName}
       </h2>
       <p className="mb-8 text-sm text-zinc-400">
         {phase === "shuffling"
-          ? "Randomizing the bracket..."
-          : "Here's your tournament order"}
+          ? "Randomizing bracket..."
+          : phase === "locked"
+            ? "Locked in!"
+            : "All brackets set!"}
       </p>
-      <div className="flex flex-col gap-2">
-        {displayOrder.map((team, i) => (
-          <div
-            key={team.id}
-            className={`flex items-center gap-3 rounded-lg px-6 py-3 transition-all duration-100 ${
-              phase === "locked"
-                ? "scale-105 bg-white text-zinc-900"
-                : "bg-zinc-800 text-white"
-            }`}
-          >
-            <span
-              className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${
+
+      {/* Mini bracket visualization */}
+      <div className="flex flex-col gap-3">
+        {Array.from({ length: matchCount }).map((_, matchIdx) => {
+          const home = slots[matchIdx * 2];
+          const away = slots[matchIdx * 2 + 1];
+
+          return (
+            <div
+              key={matchIdx}
+              className={`overflow-hidden rounded-lg border transition-all duration-300 ${
                 phase === "locked"
-                  ? "bg-zinc-900 text-white"
-                  : "bg-zinc-700 text-zinc-300"
+                  ? "border-white/30 bg-white/10"
+                  : "border-zinc-700 bg-zinc-800/80"
               }`}
             >
-              {i + 1}
-            </span>
-            <span className="text-sm font-semibold">{team.name}</span>
-          </div>
-        ))}
+              <div
+                className={`flex items-center gap-3 border-b px-5 py-2.5 transition-all duration-200 ${
+                  phase === "locked"
+                    ? "border-white/20"
+                    : "border-zinc-700"
+                }`}
+              >
+                <span className="w-5 text-center text-xs font-bold text-zinc-500">
+                  {matchIdx * 2 + 1}
+                </span>
+                <span
+                  className={`text-sm font-semibold transition-all duration-200 ${
+                    phase === "locked" ? "text-white" : "text-zinc-300"
+                  }`}
+                >
+                  {home ?? "—"}
+                </span>
+              </div>
+              <div className="flex items-center gap-3 px-5 py-2.5">
+                <span className="w-5 text-center text-xs font-bold text-zinc-500">
+                  {matchIdx * 2 + 2}
+                </span>
+                <span
+                  className={`text-sm font-semibold transition-all duration-200 ${
+                    phase === "locked" ? "text-white" : "text-zinc-300"
+                  }`}
+                >
+                  {away ?? "—"}
+                </span>
+              </div>
+            </div>
+          );
+        })}
       </div>
+
+      <p className="mt-6 text-xs text-zinc-600">
+        {currentGameIdx + 1} of {seedOrders.length} games
+      </p>
     </div>
   );
 }
@@ -129,8 +226,7 @@ function MatchCard({
   onSelectWinner: (matchId: string, winnerId: string) => void;
 }) {
   const isComplete = match.status === "completed";
-  const isPlayable =
-    match.homeTeamId && match.awayTeamId && !isComplete;
+  const isPlayable = match.homeTeamId && match.awayTeamId && !isComplete;
 
   return (
     <div className="w-44 rounded-lg border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900">
@@ -184,13 +280,12 @@ function TeamSlot({
   onClick?: () => void;
   position: "top" | "bottom";
 }) {
-  const roundedClass =
-    position === "top" ? "rounded-t-lg" : "rounded-b-lg";
+  const roundedClass = position === "top" ? "rounded-t-lg" : "rounded-b-lg";
 
   if (!team) {
     return (
       <div
-        className={`px-3 py-2 text-xs text-zinc-400 italic ${roundedClass}`}
+        className={`px-3 py-2 text-xs italic text-zinc-400 ${roundedClass}`}
       >
         TBD
       </div>
@@ -249,7 +344,6 @@ function GameBracket({
       <div className="flex gap-8" style={{ minWidth: totalRounds * 210 }}>
         {rounds.map((roundMatches, ri) => {
           const round = ri + 1;
-          // Spacing grows exponentially per round for bracket alignment
           const gap = round === 1 ? 16 : Math.pow(2, ri) * 32;
 
           return (
@@ -295,6 +389,7 @@ export default function BracketPage({
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [loading, setLoading] = useState(true);
   const [showShuffle, setShowShuffle] = useState(animate);
+  const [seedOrders, setSeedOrders] = useState<SeedOrder[] | null>(null);
   const [activeGameId, setActiveGameId] = useState<string | null>(null);
 
   const fetchTournament = useCallback(async () => {
@@ -313,9 +408,22 @@ export default function BracketPage({
     fetchTournament();
   }, [fetchTournament]);
 
+  // Load seed orders from sessionStorage if animate=true
+  useEffect(() => {
+    if (animate) {
+      const stored = sessionStorage.getItem(`seedOrders-${id}`);
+      if (stored) {
+        setSeedOrders(JSON.parse(stored));
+        sessionStorage.removeItem(`seedOrders-${id}`);
+      } else {
+        // No seed data, skip animation
+        setShowShuffle(false);
+      }
+    }
+  }, [animate, id]);
+
   const handleShuffleComplete = useCallback(() => {
     setShowShuffle(false);
-    // Remove animate param from URL without reload
     window.history.replaceState(
       {},
       "",
@@ -348,10 +456,8 @@ export default function BracketPage({
     );
   }
 
-  // Compute total rounds
   const totalRounds = Math.ceil(Math.log2(tournament.teams.length));
 
-  // Group matches by game
   const matchesByGame = new Map<string, Match[]>();
   for (const match of tournament.matches) {
     const arr = matchesByGame.get(match.gameId) ?? [];
@@ -363,7 +469,6 @@ export default function BracketPage({
     ? matchesByGame.get(activeGameId) ?? []
     : [];
 
-  // Build first-round schedule (interleaved across games)
   const firstRoundByGame = tournament.games.map((tg) => ({
     game: tg.game,
     matches: (matchesByGame.get(tg.gameId) ?? [])
@@ -371,7 +476,6 @@ export default function BracketPage({
       .sort((a, b) => a.position - b.position),
   }));
 
-  // Interleave: slot 0 = game1 match0, slot 1 = game2 match0, etc.
   const maxFirstRoundMatches = Math.max(
     ...firstRoundByGame.map((g) => g.matches.length),
     0
@@ -387,9 +491,9 @@ export default function BracketPage({
 
   return (
     <>
-      {showShuffle && (
-        <ShuffleAnimation
-          teams={tournament.teams}
+      {showShuffle && seedOrders && (
+        <BracketShuffleAnimation
+          seedOrders={seedOrders}
           onComplete={handleShuffleComplete}
         />
       )}
