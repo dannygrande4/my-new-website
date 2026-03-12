@@ -1,8 +1,8 @@
 "use client";
 
 import { Canvas, useFrame } from "@react-three/fiber";
-import { useGLTF, Environment, Float } from "@react-three/drei";
-import { useRef, Component, type ReactNode } from "react";
+import { useGLTF, Environment, Float, Center } from "@react-three/drei";
+import { useRef, useEffect, Component, type ReactNode } from "react";
 import * as THREE from "three";
 
 class TrophyErrorBoundary extends Component<
@@ -39,18 +39,20 @@ function TrophyModel() {
   });
 
   return (
-    <Float speed={2} rotationIntensity={0.2} floatIntensity={0.5}>
-      <group ref={ref}>
-        <primitive object={scene} scale={1.5} position={[0, -0.5, 0]} />
-      </group>
-    </Float>
+    <Center>
+      <Float speed={2} rotationIntensity={0.2} floatIntensity={0.5}>
+        <group ref={ref}>
+          <primitive object={scene} scale={2} />
+        </group>
+      </Float>
+    </Center>
   );
 }
 
 export default function TrophyScene() {
   return (
     <TrophyErrorBoundary>
-      <Canvas camera={{ position: [0, 0.5, 4], fov: 40 }}>
+      <Canvas camera={{ position: [0, 0, 5], fov: 35 }}>
         <ambientLight intensity={0.6} />
         <directionalLight position={[5, 5, 5]} intensity={1} />
         <directionalLight position={[-3, 3, -3]} intensity={0.4} />

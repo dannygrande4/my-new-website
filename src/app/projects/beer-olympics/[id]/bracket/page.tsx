@@ -392,7 +392,7 @@ function FinalsBracket({
 
           {/* Trophy */}
           <div className="flex flex-col items-center">
-            <div className="h-72 w-72">
+            <div className="relative z-10 h-80 w-80">
               <Suspense fallback={<div className="flex h-full items-center justify-center text-zinc-500">Loading...</div>}>
                 <TrophyScene />
               </Suspense>
@@ -478,7 +478,7 @@ function FinalsBracket({
           {finalMatch && (
             <MatchCard match={finalMatch} onSelectWinner={onSelectWinner} />
           )}
-          <div className="h-72 w-72">
+          <div className="relative z-10 h-80 w-80">
             <Suspense fallback={<div className="flex h-full items-center justify-center text-zinc-500">Loading...</div>}>
               <TrophyScene />
             </Suspense>
@@ -753,7 +753,7 @@ export default function BracketPage({
               <div>
                 {!finalsReady && !finalsGenerated && (
                   <div className="flex flex-col items-center gap-4 py-16 text-center">
-                    <div className="h-72 w-72">
+                    <div className="relative z-10 h-80 w-80">
                       <Suspense fallback={null}>
                         <TrophyScene />
                       </Suspense>
@@ -772,7 +772,7 @@ export default function BracketPage({
 
                 {finalsReady && !finalsGenerated && (
                   <div className="flex flex-col items-center gap-4 py-16 text-center">
-                    <div className="h-72 w-72">
+                    <div className="relative z-10 h-80 w-80">
                       <Suspense fallback={null}>
                         <TrophyScene />
                       </Suspense>
