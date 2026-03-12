@@ -1,0 +1,68 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Tournament {
+  id        String   @id @default(cuid())
+  name      String
+  status    String   @default("setup") // setup, in_progress, completed
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  teams  Team[]
+  games  TournamentGame[]
+  matches Match[]
+}
+
+model Team {
+  id           String   @id @default(cuid())
+  name         String
+  members      String[] // array of member names
+  tournamentId String
+
+  tournament  Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  homeMatches Match[]    @relation("HomeTeam")
+  awayMatches Match[]    @relation("AwayTeam")
+  wonMatches  Match[]    @relation("WinnerTeam")
+}
+
+model Game {
+  id   String @id @default(cuid())
+  name String @unique // Beer Pong, Beer Die, Baseball, Honeycomb
+
+  tournaments TournamentGame[]
+  matches     Match[]
+}
+
+model TournamentGame {
+  tournamentId String
+  gameId       String
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  game       Game       @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@id([tournamentId, gameId])
+}
+
+model Match {
+  id           String  @id @default(cuid())
+  tournamentId String
+  gameId       String
+  round        Int
+  position     Int     // position within the round (for bracket ordering)
+  homeTeamId   String?
+  awayTeamId   String?
+  winnerId     String?
+  status       String  @default("pending") // pending, in_progress, completed
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  game       Game       @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  homeTeam   Team?      @relation("HomeTeam", fields: [homeTeamId], references: [id])
+  awayTeam   Team?      @relation("AwayTeam", fields: [awayTeamId], references: [id])
+  winner     Team?      @relation("WinnerTeam", fields: [winnerId], references: [id])
+}
