@@ -30,7 +30,6 @@ function shuffleWithUniqueMatchups<T extends { id: string }>(
 
     if (!hasDuplicate) return shuffled;
   }
-  // Fallback: return a regular shuffle if we can't avoid all duplicates
   return shuffle(teams);
 }
 
@@ -42,12 +41,36 @@ function pickByeTeams<T extends { id: string }>(
 ): T[] {
   if (numByes <= 0) return [];
 
-  // Sort teams by bye count (ascending), then shuffle within same count for randomness
+  // Sort by bye count (ascending), shuffle within same count for randomness
   const sorted = shuffle([...teams]).sort(
     (a, b) => (byeHistory.get(a.id) ?? 0) - (byeHistory.get(b.id) ?? 0)
   );
 
   return sorted.slice(0, numByes);
+}
+
+// Spread bye positions evenly across match slots for balanced brackets
+function getByePositions(matchCount: number, numByes: number): Set<number> {
+  const positions = new Set<number>();
+  if (numByes <= 0) return positions;
+
+  // Distribute byes evenly across the bracket
+  // For 4 slots, 2 byes → positions 1, 3 (alternating with real matches)
+  // For 4 slots, 3 byes → positions 1, 2, 3
+  // For 4 slots, 1 bye → position 3 (at the end)
+  for (let i = 0; i < numByes; i++) {
+    // Place byes starting from the end, spread evenly
+    const pos = matchCount - 1 - Math.floor(i * matchCount / numByes);
+    positions.add(pos);
+  }
+
+  return positions;
+}
+
+interface SeedMatch {
+  home: { id: string; name: string } | null;
+  away: { id: string; name: string } | null;
+  isBye: boolean;
 }
 
 export async function POST(
@@ -78,6 +101,7 @@ export async function POST(
   const n = teams.length;
   const totalRounds = Math.ceil(Math.log2(n));
   const bracketSize = Math.pow(2, totalRounds);
+  const matchCount = bracketSize / 2;
   const numByes = bracketSize - n;
 
   // Track pairings across games to ensure unique matchups
@@ -86,12 +110,11 @@ export async function POST(
   // Track bye history across games: teamId -> number of byes received
   const byeHistory = new Map<string, number>();
 
-  // Store per-game seed orders to send to the client for animation
+  // Store per-game seed orders for client animation
   const seedOrders: {
     gameId: string;
     gameName: string;
-    teams: { id: string; name: string }[];
-    byeTeamIds: string[];
+    matches: SeedMatch[];
   }[] = [];
 
   const allMatchData: {
@@ -110,18 +133,19 @@ export async function POST(
 
     // Pick which teams get a bye this game (rotate across games)
     const byeTeams = pickByeTeams(teams, numByes, byeHistory);
-    const byeTeamIds = new Set(byeTeams.map((t) => t.id));
+    const byeTeamIdSet = new Set(byeTeams.map((t) => t.id));
 
     // Update bye history
     for (const bt of byeTeams) {
       byeHistory.set(bt.id, (byeHistory.get(bt.id) ?? 0) + 1);
     }
 
-    // Playing teams (non-bye) get shuffled with unique matchup constraint
-    const playingTeams = teams.filter((t) => !byeTeamIds.has(t.id));
+    // Playing teams get shuffled with unique matchup constraint
+    const playingTeams = teams.filter((t) => !byeTeamIdSet.has(t.id));
     const shuffledPlaying = shuffleWithUniqueMatchups(playingTeams, usedPairings);
+    const shuffledByes = shuffle([...byeTeams]);
 
-    // Record this game's pairings (only playing teams, not byes)
+    // Record this game's pairings
     for (let i = 0; i < shuffledPlaying.length - 1; i += 2) {
       const pairKey = [shuffledPlaying[i].id, shuffledPlaying[i + 1].id]
         .sort()
@@ -129,17 +153,8 @@ export async function POST(
       usedPairings.add(pairKey);
     }
 
-    // Final team order: playing teams first, then bye teams at the end
-    // Bye teams end up in slots with null opponents and auto-advance
-    const shuffledByeTeams = shuffle([...byeTeams]);
-    const finalOrder = [...shuffledPlaying, ...shuffledByeTeams];
-
-    seedOrders.push({
-      gameId,
-      gameName: tg.game.name,
-      teams: finalOrder.map((t) => ({ id: t.id, name: t.name })),
-      byeTeamIds: shuffledByeTeams.map((t) => t.id),
-    });
+    // Determine which match positions are byes (spread evenly)
+    const byePositions = getByePositions(matchCount, numByes);
 
     // Create all match slots for every round
     const gameMatches: typeof allMatchData = [];
@@ -159,44 +174,59 @@ export async function POST(
       }
     }
 
-    // Seed teams into round 1
+    // Seed round 1: assign playing pairs and bye teams to their positions
     const round1 = gameMatches.filter((m) => m.round === 1);
+    let pairIdx = 0;
+    let byeIdx = 0;
+
+    const seedMatchOrder: SeedMatch[] = [];
+
     for (let i = 0; i < round1.length; i++) {
-      const homeIdx = i * 2;
-      const awayIdx = i * 2 + 1;
-      round1[i].homeTeamId = homeIdx < finalOrder.length ? finalOrder[homeIdx].id : null;
-      round1[i].awayTeamId = awayIdx < finalOrder.length ? finalOrder[awayIdx].id : null;
-
-      const hasHome = round1[i].homeTeamId !== null;
-      const hasAway = round1[i].awayTeamId !== null;
-
-      if (hasHome && !hasAway) {
-        // Bye: team auto-advances
-        round1[i].winnerId = round1[i].homeTeamId;
+      if (byePositions.has(i) && byeIdx < shuffledByes.length) {
+        // Bye slot: one team, no opponent
+        const byeTeam = shuffledByes[byeIdx++];
+        round1[i].homeTeamId = byeTeam.id;
+        round1[i].awayTeamId = null;
+        round1[i].winnerId = byeTeam.id;
         round1[i].status = "completed";
+
+        seedMatchOrder.push({
+          home: { id: byeTeam.id, name: byeTeam.name },
+          away: null,
+          isBye: true,
+        });
+
+        // Auto-advance to next round
         if (totalRounds > 1) {
           const nextPos = Math.floor(i / 2);
           const nextMatch = gameMatches.find(
             (m) => m.round === 2 && m.position === nextPos
           )!;
-          if (i % 2 === 0) nextMatch.homeTeamId = round1[i].homeTeamId;
-          else nextMatch.awayTeamId = round1[i].homeTeamId;
+          if (i % 2 === 0) nextMatch.homeTeamId = byeTeam.id;
+          else nextMatch.awayTeamId = byeTeam.id;
         }
-      } else if (!hasHome && hasAway) {
-        round1[i].winnerId = round1[i].awayTeamId;
-        round1[i].status = "completed";
-        if (totalRounds > 1) {
-          const nextPos = Math.floor(i / 2);
-          const nextMatch = gameMatches.find(
-            (m) => m.round === 2 && m.position === nextPos
-          )!;
-          if (i % 2 === 0) nextMatch.homeTeamId = round1[i].awayTeamId;
-          else nextMatch.awayTeamId = round1[i].awayTeamId;
-        }
-      } else if (!hasHome && !hasAway) {
-        round1[i].status = "completed";
+      } else {
+        // Real match slot: two playing teams
+        const home = shuffledPlaying[pairIdx * 2];
+        const away = shuffledPlaying[pairIdx * 2 + 1];
+        pairIdx++;
+
+        round1[i].homeTeamId = home.id;
+        round1[i].awayTeamId = away.id;
+
+        seedMatchOrder.push({
+          home: { id: home.id, name: home.name },
+          away: { id: away.id, name: away.name },
+          isBye: false,
+        });
       }
     }
+
+    seedOrders.push({
+      gameId,
+      gameName: tg.game.name,
+      matches: seedMatchOrder,
+    });
 
     allMatchData.push(...gameMatches);
   }

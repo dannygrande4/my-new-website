@@ -43,11 +43,16 @@ interface Tournament {
   matches: Match[];
 }
 
+interface SeedMatch {
+  home: { id: string; name: string } | null;
+  away: { id: string; name: string } | null;
+  isBye: boolean;
+}
+
 interface SeedOrder {
   gameId: string;
   gameName: string;
-  teams: { id: string; name: string }[];
-  byeTeamIds: string[];
+  matches: SeedMatch[];
 }
 
 interface FinalsData {
@@ -68,62 +73,58 @@ function BracketShuffleAnimation({
   onComplete: () => void;
 }) {
   const [currentGameIdx, setCurrentGameIdx] = useState(0);
-  const [slots, setSlots] = useState<(string | null)[]>([]);
+  const [displayMatches, setDisplayMatches] = useState<{ home: string | null; away: string | null }[]>([]);
   const [phase, setPhase] = useState<"shuffling" | "locked" | "done">("shuffling");
   const completedRef = useRef(false);
 
   const currentGame = seedOrders[currentGameIdx];
-  const byeTeamIds = new Set(currentGame?.byeTeamIds ?? []);
-  const teamCount = currentGame?.teams.length ?? 0;
-  // Total bracket slots = next power of 2
-  const bracketSize = Math.pow(2, Math.ceil(Math.log2(teamCount)));
-  const matchCount = bracketSize / 2;
+  const matchCount = currentGame?.matches.length ?? 0;
 
-  const finalSlots = useCallback(() => {
+  // Collect all team names for random cycling
+  const allNames = useCallback(() => {
     if (!currentGame) return [];
-    const result: (string | null)[] = [];
-    for (let i = 0; i < matchCount; i++) {
-      result.push(currentGame.teams[i * 2]?.name ?? null);
-      result.push(currentGame.teams[i * 2 + 1]?.name ?? null);
+    const names: string[] = [];
+    for (const m of currentGame.matches) {
+      if (m.home) names.push(m.home.name);
+      if (m.away) names.push(m.away.name);
     }
-    return result;
-  }, [currentGame, matchCount]);
-
-  // Map team name -> team id for bye detection in final slots
-  const teamNameToId = useCallback(() => {
-    if (!currentGame) return new Map<string, string>();
-    const map = new Map<string, string>();
-    for (const t of currentGame.teams) {
-      map.set(t.name, t.id);
-    }
-    return map;
+    return names;
   }, [currentGame]);
 
   useEffect(() => {
     if (phase !== "shuffling" || !currentGame) return;
-    const allNames = currentGame.teams.map((t) => t.name);
+    const names = allNames();
     let count = 0;
     const maxShuffles = 20;
-    setSlots(Array(matchCount * 2).fill(null));
+    setDisplayMatches(currentGame.matches.map(() => ({ home: null, away: null })));
 
     const interval = setInterval(() => {
       if (count >= maxShuffles) {
         clearInterval(interval);
-        setSlots(finalSlots());
+        // Lock in the final assignments
+        setDisplayMatches(
+          currentGame.matches.map((m) => ({
+            home: m.home?.name ?? null,
+            away: m.away?.name ?? null,
+          }))
+        );
         setPhase("locked");
         return;
       }
-      const shuffled = [...allNames].sort(() => Math.random() - 0.5);
-      const randomized: (string | null)[] = [];
-      for (let i = 0; i < matchCount * 2; i++) {
-        randomized.push(shuffled[i % shuffled.length]);
-      }
-      setSlots(randomized);
+      // Random cycling: shuffle names into all visible slots
+      const shuffled = [...names].sort(() => Math.random() - 0.5);
+      let idx = 0;
+      setDisplayMatches(
+        currentGame.matches.map(() => ({
+          home: shuffled[idx++ % shuffled.length],
+          away: shuffled[idx++ % shuffled.length],
+        }))
+      );
       count++;
     }, 70);
 
     return () => clearInterval(interval);
-  }, [phase, currentGame, matchCount, finalSlots]);
+  }, [phase, currentGame, matchCount, allNames]);
 
   useEffect(() => {
     if (phase !== "locked") return;
@@ -143,8 +144,6 @@ function BracketShuffleAnimation({
   }, [phase, currentGameIdx, seedOrders.length, onComplete]);
 
   if (!currentGame) return null;
-
-  const nameToId = teamNameToId();
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/95 px-6">
@@ -173,16 +172,15 @@ function BracketShuffleAnimation({
             : "All brackets set!"}
       </p>
       <div className="flex flex-col gap-3">
-        {Array.from({ length: matchCount }).map((_, matchIdx) => {
-          const home = slots[matchIdx * 2];
-          const away = slots[matchIdx * 2 + 1];
-          const isByeMatch = phase === "locked" && home && !away;
+        {displayMatches.map((dm, matchIdx) => {
+          const finalMatch = currentGame.matches[matchIdx];
+          const isBye = phase === "locked" && finalMatch?.isBye;
 
           return (
             <div
               key={matchIdx}
               className={`overflow-hidden rounded-lg border transition-all duration-300 ${
-                isByeMatch
+                isBye
                   ? "border-amber-400/60 bg-amber-900/20"
                   : phase === "locked"
                     ? "border-white/30 bg-white/10"
@@ -190,17 +188,17 @@ function BracketShuffleAnimation({
               }`}
             >
               <div className={`flex items-center gap-3 border-b px-5 py-2.5 transition-all duration-200 ${
-                isByeMatch ? "border-amber-400/30" : phase === "locked" ? "border-white/20" : "border-zinc-700"
+                isBye ? "border-amber-400/30" : phase === "locked" ? "border-white/20" : "border-zinc-700"
               }`}>
                 <span className="w-5 text-center text-xs font-bold text-zinc-500">{matchIdx * 2 + 1}</span>
                 <span className={`text-sm font-semibold transition-all duration-200 ${
-                  isByeMatch
+                  isBye
                     ? "text-amber-300"
                     : phase === "locked" ? "text-white" : "text-zinc-300"
                 }`}>
-                  {home ?? "—"}
+                  {dm.home ?? "—"}
                 </span>
-                {isByeMatch && (
+                {isBye && (
                   <span className="ml-auto rounded-full bg-amber-400/20 px-2.5 py-0.5 text-xs font-bold tracking-wide text-amber-300">
                     LUCKY BASTARD BYE
                   </span>
@@ -209,11 +207,11 @@ function BracketShuffleAnimation({
               <div className="flex items-center gap-3 px-5 py-2.5">
                 <span className="w-5 text-center text-xs font-bold text-zinc-500">{matchIdx * 2 + 2}</span>
                 <span className={`text-sm font-semibold transition-all duration-200 ${
-                  isByeMatch
+                  isBye
                     ? "italic text-zinc-600"
                     : phase === "locked" ? "text-white" : "text-zinc-300"
                 }`}>
-                  {isByeMatch ? "— no opponent —" : (away ?? "—")}
+                  {isBye ? "— no opponent —" : (dm.away ?? "—")}
                 </span>
               </div>
             </div>
