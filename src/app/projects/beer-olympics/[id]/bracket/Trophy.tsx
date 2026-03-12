@@ -50,7 +50,7 @@ function TrophyModel() {
 export default function TrophyScene() {
   return (
     <TrophyErrorBoundary>
-      <Canvas camera={{ position: [0, 1, 3], fov: 45 }}>
+      <Canvas camera={{ position: [0, 0.5, 4], fov: 40 }}>
         <ambientLight intensity={0.6} />
         <directionalLight position={[5, 5, 5]} intensity={1} />
         <directionalLight position={[-3, 3, -3]} intensity={0.4} />
