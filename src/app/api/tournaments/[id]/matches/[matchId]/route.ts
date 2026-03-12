@@ -25,13 +25,14 @@ export async function PATCH(
     data: { winnerId, status: "completed" },
   });
 
-  // Advance winner to next round
+  // Advance winner to next round (works for both game and finals matches)
   const nextRound = match.round + 1;
   const nextPosition = Math.floor(match.position / 2);
   const nextMatch = await prisma.match.findFirst({
     where: {
       tournamentId: id,
       gameId: match.gameId,
+      isFinals: match.isFinals,
       round: nextRound,
       position: nextPosition,
     },
@@ -45,36 +46,13 @@ export async function PATCH(
     });
   }
 
-  // Check if all final matches across all games are completed
-  const tournament = await prisma.tournament.findUnique({
-    where: { id },
-    include: { matches: true },
-  });
-
-  if (tournament) {
-    // Find the max round for each game
-    const gameRounds = new Map<string, number>();
-    for (const m of tournament.matches) {
-      const current = gameRounds.get(m.gameId) ?? 0;
-      if (m.round > current) gameRounds.set(m.gameId, m.round);
-    }
-
-    // Check if all final round matches are completed
-    const allFinalsComplete = Array.from(gameRounds.entries()).every(
-      ([gameId, maxRound]) => {
-        const finalMatch = tournament.matches.find(
-          (m) => m.gameId === gameId && m.round === maxRound
-        );
-        return finalMatch?.status === "completed";
-      }
-    );
-
-    if (allFinalsComplete) {
-      await prisma.tournament.update({
-        where: { id },
-        data: { status: "completed" },
-      });
-    }
+  // Check tournament completion:
+  // If this is a finals match and it's the final round, tournament is complete
+  if (match.isFinals && !nextMatch) {
+    await prisma.tournament.update({
+      where: { id },
+      data: { status: "completed" },
+    });
   }
 
   return NextResponse.json({ success: true });

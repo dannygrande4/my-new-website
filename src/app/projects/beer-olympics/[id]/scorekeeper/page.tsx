@@ -17,7 +17,7 @@ interface Game {
 
 interface Match {
   id: string;
-  gameId: string;
+  gameId: string | null;
   round: number;
   position: number;
   homeTeamId: string | null;
@@ -27,7 +27,8 @@ interface Match {
   homeTeam: Team | null;
   awayTeam: Team | null;
   winner: Team | null;
-  game: Game;
+  game: Game | null;
+  isFinals: boolean;
 }
 
 interface Tournament {
@@ -105,10 +106,14 @@ export default function ScorekeeperPage({
 
   const totalRounds = Math.ceil(Math.log2(tournament.teams.length));
 
-  // Build chronological match order:
-  // For each round, interleave matches across games
+  // Separate game matches from finals
+  const gameMatchList = tournament.matches.filter((m) => !m.isFinals);
+  const finalsMatchList = tournament.matches.filter((m) => m.isFinals);
+
+  // Build chronological match order for game matches
   const matchesByRoundAndGame = new Map<number, Map<string, Match[]>>();
-  for (const match of tournament.matches) {
+  for (const match of gameMatchList) {
+    if (!match.gameId) continue;
     if (!matchesByRoundAndGame.has(match.round)) {
       matchesByRoundAndGame.set(match.round, new Map());
     }
@@ -119,18 +124,15 @@ export default function ScorekeeperPage({
     gameMap.get(match.gameId)!.push(match);
   }
 
-  // Sort each game's matches by position
   for (const [, gameMap] of matchesByRoundAndGame) {
     for (const [, matches] of gameMap) {
       matches.sort((a, b) => a.position - b.position);
     }
   }
 
-  // Build ordered list of rounds
   const rounds = Array.from(matchesByRoundAndGame.keys()).sort((a, b) => a - b);
 
-  // For each round, interleave: pos0 of each game, then pos1 of each game, etc.
-  const orderedByRound: { round: number; matches: Match[] }[] = [];
+  const orderedByRound: { round: number; label: string; matches: Match[] }[] = [];
   for (const round of rounds) {
     const gameMap = matchesByRoundAndGame.get(round)!;
     const gameIds = tournament.games.map((g) => g.gameId);
@@ -146,10 +148,28 @@ export default function ScorekeeperPage({
         if (m) interleaved.push(m);
       }
     }
-    orderedByRound.push({ round, matches: interleaved });
+    orderedByRound.push({ round, label: getRoundLabel(round, totalRounds), matches: interleaved });
   }
 
-  // Find the first playable match (both teams set, not completed)
+  // Add finals rounds
+  if (finalsMatchList.length > 0) {
+    const finalsTotalRounds = Math.max(...finalsMatchList.map((m) => m.round), 0);
+    for (let r = 1; r <= finalsTotalRounds; r++) {
+      const roundMatches = finalsMatchList
+        .filter((m) => m.round === r)
+        .sort((a, b) => a.position - b.position);
+      const fromFinal = finalsTotalRounds - r;
+      const label =
+        fromFinal === 0
+          ? "Grand Final"
+          : fromFinal === 1
+            ? "Finals - Semifinals"
+            : `Finals - Round ${r}`;
+      orderedByRound.push({ round: 100 + r, label, matches: roundMatches });
+    }
+  }
+
+  // Find the first playable match
   let firstPlayableId: string | null = null;
   for (const { matches } of orderedByRound) {
     for (const m of matches) {
@@ -208,7 +228,7 @@ export default function ScorekeeperPage({
 
         {/* Matches by round */}
         <div className="mt-8 flex flex-col gap-8">
-          {orderedByRound.map(({ round, matches }) => {
+          {orderedByRound.map(({ round, label, matches }) => {
             // Skip rounds with only bye matches (no real matchups)
             const realMatches = matches.filter(
               (m) => m.homeTeamId && m.awayTeamId
@@ -218,7 +238,7 @@ export default function ScorekeeperPage({
             return (
               <section key={round}>
                 <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-zinc-400">
-                  {getRoundLabel(round, totalRounds)}
+                  {label}
                 </h2>
                 <div className="flex flex-col gap-3">
                   {realMatches.map((match) => {
@@ -245,7 +265,7 @@ export default function ScorekeeperPage({
                         {/* Match header */}
                         <div className="flex items-center justify-between bg-zinc-50 px-4 py-2 dark:bg-zinc-800/50">
                           <span className="text-xs font-medium text-zinc-500">
-                            {match.game.name}
+                            {match.isFinals ? "Finals" : match.game?.name}
                           </span>
                           {isNext && (
                             <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700 dark:bg-blue-900/40 dark:text-blue-400">

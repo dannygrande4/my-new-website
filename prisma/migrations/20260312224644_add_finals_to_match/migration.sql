@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "Match" ADD COLUMN     "isFinals" BOOLEAN NOT NULL DEFAULT false,
+ALTER COLUMN "gameId" DROP NOT NULL;
