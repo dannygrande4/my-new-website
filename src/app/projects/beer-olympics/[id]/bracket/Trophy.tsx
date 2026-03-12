@@ -42,7 +42,7 @@ function TrophyModel() {
     <Center>
       <Float speed={2} rotationIntensity={0.2} floatIntensity={0.5}>
         <group ref={ref}>
-          <primitive object={scene} scale={2} />
+          <primitive object={scene} scale={1.8} />
         </group>
       </Float>
     </Center>

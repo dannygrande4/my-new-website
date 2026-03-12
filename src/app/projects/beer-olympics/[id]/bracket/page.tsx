@@ -446,9 +446,9 @@ function FinalsBracket({
 
   return (
     <div className="overflow-x-auto pb-4">
-      <div className="flex items-center gap-4">
+      <div className="flex items-center justify-center">
         {/* Left bracket (flows right) */}
-        <div className="flex gap-6">
+        <div className="flex flex-1 justify-end gap-6">
           {leftRounds.map((roundMatches, ri) => {
             const round = ri + 1;
             const gap = round === 1 ? 16 : Math.pow(2, ri) * 32;
@@ -471,7 +471,7 @@ function FinalsBracket({
         </div>
 
         {/* Center: Final match + Trophy */}
-        <div className="flex flex-col items-center gap-2">
+        <div className="flex shrink-0 flex-col items-center gap-2">
           <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
             Grand Final
           </p>
@@ -491,7 +491,7 @@ function FinalsBracket({
         </div>
 
         {/* Right bracket (flows left, reversed) */}
-        <div className="flex flex-row-reverse gap-6">
+        <div className="flex flex-1 flex-row-reverse gap-6">
           {rightRounds.map((roundMatches, ri) => {
             const round = ri + 1;
             const gap = round === 1 ? 16 : Math.pow(2, ri) * 32;
