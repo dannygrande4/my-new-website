@@ -2,8 +2,31 @@
 
 import { Canvas, useFrame } from "@react-three/fiber";
 import { useGLTF, Environment, Float } from "@react-three/drei";
-import { useRef } from "react";
+import { useRef, Component, type ReactNode } from "react";
 import * as THREE from "three";
+
+class TrophyErrorBoundary extends Component<
+  { children: ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex h-full items-center justify-center text-4xl">
+          🏆
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 function TrophyModel() {
   const { scene } = useGLTF("/models/trophy.glb");
@@ -26,13 +49,15 @@ function TrophyModel() {
 
 export default function TrophyScene() {
   return (
-    <Canvas camera={{ position: [0, 1, 3], fov: 45 }}>
-      <ambientLight intensity={0.6} />
-      <directionalLight position={[5, 5, 5]} intensity={1} />
-      <directionalLight position={[-3, 3, -3]} intensity={0.4} />
-      <TrophyModel />
-      <Environment preset="city" />
-    </Canvas>
+    <TrophyErrorBoundary>
+      <Canvas camera={{ position: [0, 1, 3], fov: 45 }}>
+        <ambientLight intensity={0.6} />
+        <directionalLight position={[5, 5, 5]} intensity={1} />
+        <directionalLight position={[-3, 3, -3]} intensity={0.4} />
+        <TrophyModel />
+        <Environment preset="city" />
+      </Canvas>
+    </TrophyErrorBoundary>
   );
 }
 
