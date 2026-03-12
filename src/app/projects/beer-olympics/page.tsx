@@ -122,10 +122,14 @@ export default function BeerOlympics() {
                     </div>
                   </div>
                   <Link
-                    href={`/projects/beer-olympics/${t.id}`}
+                    href={
+                      t.status === "setup"
+                        ? `/projects/beer-olympics/${t.id}`
+                        : `/projects/beer-olympics/${t.id}/bracket`
+                    }
                     className="mt-3 inline-block text-sm font-medium hover:underline"
                   >
-                    Open Setup &rarr;
+                    {t.status === "setup" ? "Open Setup" : "View Bracket"} &rarr;
                   </Link>
                 </div>
               ))}

@@ -8,7 +8,14 @@ export async function GET(
   const { id } = await params;
   const tournament = await prisma.tournament.findUnique({
     where: { id },
-    include: { teams: true, games: { include: { game: true } }, matches: true },
+    include: {
+      teams: true,
+      games: { include: { game: true } },
+      matches: {
+        include: { homeTeam: true, awayTeam: true, winner: true, game: true },
+        orderBy: [{ round: "asc" }, { position: "asc" }],
+      },
+    },
   });
   if (!tournament) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });

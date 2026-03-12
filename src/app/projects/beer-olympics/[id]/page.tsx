@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState, use } from "react";
+import { useRouter } from "next/navigation";
 
 interface Game {
   id: string;
@@ -28,6 +29,7 @@ export default function TournamentSetup({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
+  const router = useRouter();
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [allGames, setAllGames] = useState<Game[]>([]);
   const [selectedGameIds, setSelectedGameIds] = useState<string[]>([]);
@@ -35,6 +37,7 @@ export default function TournamentSetup({
   const [memberName, setMemberName] = useState("");
   const [currentMembers, setCurrentMembers] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [starting, setStarting] = useState(false);
 
   useEffect(() => {
     fetchTournament();
@@ -47,6 +50,10 @@ export default function TournamentSetup({
       const data = await res.json();
       setTournament(data);
       setSelectedGameIds(data.games.map((g: { gameId: string }) => g.gameId));
+      // Redirect to bracket if already started
+      if (data.status === "in_progress" || data.status === "completed") {
+        router.replace(`/projects/beer-olympics/${id}/bracket`);
+      }
     }
     setLoading(false);
   }
@@ -104,6 +111,20 @@ export default function TournamentSetup({
       body: JSON.stringify({ teamId }),
     });
     fetchTournament();
+  }
+
+  async function startTournament() {
+    setStarting(true);
+    const res = await fetch(`/api/tournaments/${id}/start`, {
+      method: "POST",
+    });
+    if (res.ok) {
+      router.push(`/projects/beer-olympics/${id}/bracket?animate=true`);
+    } else {
+      const data = await res.json();
+      alert(data.error || "Failed to start tournament");
+      setStarting(false);
+    }
   }
 
   if (loading) {
@@ -253,10 +274,11 @@ export default function TournamentSetup({
 
         {/* Start Button */}
         <button
-          disabled={!canStart}
+          onClick={startTournament}
+          disabled={!canStart || starting}
           className="mt-10 w-full rounded-full bg-zinc-900 py-3 text-sm font-semibold text-white transition-colors hover:bg-zinc-700 disabled:opacity-40 disabled:hover:bg-zinc-900 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200 dark:disabled:hover:bg-white"
         >
-          Start Tournament
+          {starting ? "Starting..." : "Start Tournament"}
         </button>
         {!canStart && (
           <p className="mt-2 text-center text-xs text-zinc-400">
