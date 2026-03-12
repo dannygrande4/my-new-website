@@ -1,63 +1,50 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-const AVAILABLE_GAMES = [
-  { id: "beer-pong", name: "Beer Pong" },
-  { id: "beer-die", name: "Beer Die" },
-  { id: "baseball", name: "Baseball" },
-  { id: "honeycomb", name: "Honeycomb" },
-];
-
-interface Team {
+interface Tournament {
   id: string;
   name: string;
-  members: string[];
+  status: string;
+  createdAt: string;
+  teams: { id: string; name: string; members: string[] }[];
+  games: { game: { id: string; name: string } }[];
 }
 
 export default function BeerOlympics() {
-  const [selectedGames, setSelectedGames] = useState<string[]>([]);
-  const [teams, setTeams] = useState<Team[]>([]);
-  const [teamName, setTeamName] = useState("");
-  const [memberName, setMemberName] = useState("");
-  const [currentMembers, setCurrentMembers] = useState<string[]>([]);
+  const [tournaments, setTournaments] = useState<Tournament[]>([]);
+  const [name, setName] = useState("");
+  const [loading, setLoading] = useState(true);
 
-  function toggleGame(gameId: string) {
-    setSelectedGames((prev) =>
-      prev.includes(gameId)
-        ? prev.filter((id) => id !== gameId)
-        : [...prev, gameId]
-    );
+  useEffect(() => {
+    fetchTournaments();
+  }, []);
+
+  async function fetchTournaments() {
+    const res = await fetch("/api/tournaments");
+    const data = await res.json();
+    setTournaments(data);
+    setLoading(false);
   }
 
-  function addMember() {
-    const trimmed = memberName.trim();
-    if (!trimmed) return;
-    setCurrentMembers((prev) => [...prev, trimmed]);
-    setMemberName("");
+  async function createTournament() {
+    if (!name.trim()) return;
+    const res = await fetch("/api/tournaments", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: name.trim() }),
+    });
+    if (res.ok) {
+      setName("");
+      fetchTournaments();
+    }
   }
 
-  function removeMember(index: number) {
-    setCurrentMembers((prev) => prev.filter((_, i) => i !== index));
+  async function deleteTournament(id: string) {
+    await fetch(`/api/tournaments/${id}`, { method: "DELETE" });
+    fetchTournaments();
   }
-
-  function addTeam() {
-    const trimmedName = teamName.trim();
-    if (!trimmedName || currentMembers.length === 0) return;
-    setTeams((prev) => [
-      ...prev,
-      { id: crypto.randomUUID(), name: trimmedName, members: currentMembers },
-    ]);
-    setTeamName("");
-    setCurrentMembers([]);
-  }
-
-  function removeTeam(id: string) {
-    setTeams((prev) => prev.filter((t) => t.id !== id));
-  }
-
-  const canStart = selectedGames.length > 0 && teams.length >= 2;
 
   return (
     <div className="min-h-screen px-6 py-16">
@@ -72,132 +59,79 @@ export default function BeerOlympics() {
           Beer Olympics
         </h1>
         <p className="mt-2 text-zinc-500 dark:text-zinc-400">
-          Set up your tournament. Pick games, add teams, then compete.
+          Create a tournament, add teams, pick games, and compete.
         </p>
 
-        {/* Game Selection */}
+        {/* Create Tournament */}
         <section className="mt-10">
-          <h2 className="text-lg font-semibold">Select Games</h2>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {AVAILABLE_GAMES.map((game) => {
-              const selected = selectedGames.includes(game.id);
-              return (
-                <button
-                  key={game.id}
-                  onClick={() => toggleGame(game.id)}
-                  className={`rounded-full border px-4 py-2 text-sm font-medium transition-colors ${
-                    selected
-                      ? "border-zinc-900 bg-zinc-900 text-white dark:border-white dark:bg-white dark:text-zinc-900"
-                      : "border-zinc-300 hover:border-zinc-500 dark:border-zinc-700 dark:hover:border-zinc-500"
-                  }`}
-                >
-                  {game.name}
-                </button>
-              );
-            })}
-          </div>
-        </section>
-
-        {/* Add Team */}
-        <section className="mt-10">
-          <h2 className="text-lg font-semibold">Add Teams</h2>
-          <div className="mt-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+          <h2 className="text-lg font-semibold">New Tournament</h2>
+          <div className="mt-3 flex gap-2">
             <input
               type="text"
-              placeholder="Team name"
-              value={teamName}
-              onChange={(e) => setTeamName(e.target.value)}
-              className="w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:focus:border-zinc-500"
+              placeholder="Tournament name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && createTournament()}
+              className="flex-1 rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:focus:border-zinc-500"
             />
-
-            <div className="mt-3 flex gap-2">
-              <input
-                type="text"
-                placeholder="Member name"
-                value={memberName}
-                onChange={(e) => setMemberName(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && addMember()}
-                className="flex-1 rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:focus:border-zinc-500"
-              />
-              <button
-                onClick={addMember}
-                className="rounded-md bg-zinc-200 px-3 py-2 text-sm font-medium transition-colors hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700"
-              >
-                Add
-              </button>
-            </div>
-
-            {currentMembers.length > 0 && (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {currentMembers.map((member, i) => (
-                  <span
-                    key={i}
-                    className="flex items-center gap-1 rounded-full bg-zinc-100 px-3 py-1 text-sm dark:bg-zinc-800"
-                  >
-                    {member}
-                    <button
-                      onClick={() => removeMember(i)}
-                      className="ml-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
-                    >
-                      &times;
-                    </button>
-                  </span>
-                ))}
-              </div>
-            )}
-
             <button
-              onClick={addTeam}
-              disabled={!teamName.trim() || currentMembers.length === 0}
-              className="mt-4 w-full rounded-md bg-zinc-900 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-40 disabled:hover:bg-zinc-900 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200 dark:disabled:hover:bg-white"
+              onClick={createTournament}
+              disabled={!name.trim()}
+              className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-40 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
             >
-              Add Team
+              Create
             </button>
           </div>
         </section>
 
-        {/* Teams List */}
-        {teams.length > 0 && (
-          <section className="mt-10">
-            <h2 className="text-lg font-semibold">
-              Teams ({teams.length})
-            </h2>
-            <div className="mt-3 flex flex-col gap-2">
-              {teams.map((team) => (
+        {/* Tournament List */}
+        <section className="mt-10">
+          <h2 className="text-lg font-semibold">Tournaments</h2>
+          {loading ? (
+            <p className="mt-3 text-sm text-zinc-400">Loading...</p>
+          ) : tournaments.length === 0 ? (
+            <p className="mt-3 text-sm text-zinc-400">
+              No tournaments yet. Create one above.
+            </p>
+          ) : (
+            <div className="mt-3 flex flex-col gap-3">
+              {tournaments.map((t) => (
                 <div
-                  key={team.id}
-                  className="flex items-center justify-between rounded-lg border border-zinc-200 px-4 py-3 dark:border-zinc-800"
+                  key={t.id}
+                  className="rounded-lg border border-zinc-200 px-5 py-4 dark:border-zinc-800"
                 >
-                  <div>
-                    <p className="font-medium">{team.name}</p>
-                    <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                      {team.members.join(", ")}
-                    </p>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-semibold">{t.name}</h3>
+                      <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+                        {t.teams.length} team{t.teams.length !== 1 && "s"}
+                        {" / "}
+                        {t.games.length} game{t.games.length !== 1 && "s"}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+                        {t.status}
+                      </span>
+                      <button
+                        onClick={() => deleteTournament(t.id)}
+                        className="text-sm text-zinc-400 hover:text-red-500"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </div>
-                  <button
-                    onClick={() => removeTeam(team.id)}
-                    className="text-sm text-zinc-400 hover:text-red-500"
+                  <Link
+                    href={`/projects/beer-olympics/${t.id}`}
+                    className="mt-3 inline-block text-sm font-medium hover:underline"
                   >
-                    Remove
-                  </button>
+                    Open Setup &rarr;
+                  </Link>
                 </div>
               ))}
             </div>
-          </section>
-        )}
-
-        {/* Start Button */}
-        <button
-          disabled={!canStart}
-          className="mt-10 w-full rounded-full bg-zinc-900 py-3 text-sm font-semibold text-white transition-colors hover:bg-zinc-700 disabled:opacity-40 disabled:hover:bg-zinc-900 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200 dark:disabled:hover:bg-white"
-        >
-          Start Tournament
-        </button>
-        {!canStart && (
-          <p className="mt-2 text-center text-xs text-zinc-400">
-            Select at least one game and add at least two teams to start.
-          </p>
-        )}
+          )}
+        </section>
       </div>
     </div>
   );
