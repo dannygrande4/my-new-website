@@ -42,7 +42,7 @@ function TrophyModel() {
     <Center>
       <Float speed={2} rotationIntensity={0.2} floatIntensity={0.5}>
         <group ref={ref}>
-          <primitive object={scene} scale={1.8} />
+          <primitive object={scene} scale={1.2} />
         </group>
       </Float>
     </Center>
@@ -52,7 +52,7 @@ function TrophyModel() {
 export default function TrophyScene() {
   return (
     <TrophyErrorBoundary>
-      <Canvas camera={{ position: [0, 0, 5], fov: 35 }}>
+      <Canvas camera={{ position: [0, 0, 6], fov: 30 }}>
         <ambientLight intensity={0.6} />
         <directionalLight position={[5, 5, 5]} intensity={1} />
         <directionalLight position={[-3, 3, -3]} intensity={0.4} />
