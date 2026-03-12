@@ -47,6 +47,7 @@ interface SeedOrder {
   gameId: string;
   gameName: string;
   teams: { id: string; name: string }[];
+  byeTeamIds: string[];
 }
 
 interface FinalsData {
@@ -72,8 +73,11 @@ function BracketShuffleAnimation({
   const completedRef = useRef(false);
 
   const currentGame = seedOrders[currentGameIdx];
+  const byeTeamIds = new Set(currentGame?.byeTeamIds ?? []);
   const teamCount = currentGame?.teams.length ?? 0;
-  const matchCount = Math.ceil(teamCount / 2);
+  // Total bracket slots = next power of 2
+  const bracketSize = Math.pow(2, Math.ceil(Math.log2(teamCount)));
+  const matchCount = bracketSize / 2;
 
   const finalSlots = useCallback(() => {
     if (!currentGame) return [];
@@ -84,6 +88,16 @@ function BracketShuffleAnimation({
     }
     return result;
   }, [currentGame, matchCount]);
+
+  // Map team name -> team id for bye detection in final slots
+  const teamNameToId = useCallback(() => {
+    if (!currentGame) return new Map<string, string>();
+    const map = new Map<string, string>();
+    for (const t of currentGame.teams) {
+      map.set(t.name, t.id);
+    }
+    return map;
+  }, [currentGame]);
 
   useEffect(() => {
     if (phase !== "shuffling" || !currentGame) return;
@@ -130,6 +144,8 @@ function BracketShuffleAnimation({
 
   if (!currentGame) return null;
 
+  const nameToId = teamNameToId();
+
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/95 px-6">
       <div className="mb-6 flex gap-2">
@@ -160,22 +176,45 @@ function BracketShuffleAnimation({
         {Array.from({ length: matchCount }).map((_, matchIdx) => {
           const home = slots[matchIdx * 2];
           const away = slots[matchIdx * 2 + 1];
+          const isByeMatch = phase === "locked" && home && !away;
+
           return (
             <div
               key={matchIdx}
               className={`overflow-hidden rounded-lg border transition-all duration-300 ${
-                phase === "locked"
-                  ? "border-white/30 bg-white/10"
-                  : "border-zinc-700 bg-zinc-800/80"
+                isByeMatch
+                  ? "border-amber-400/60 bg-amber-900/20"
+                  : phase === "locked"
+                    ? "border-white/30 bg-white/10"
+                    : "border-zinc-700 bg-zinc-800/80"
               }`}
             >
-              <div className={`flex items-center gap-3 border-b px-5 py-2.5 transition-all duration-200 ${phase === "locked" ? "border-white/20" : "border-zinc-700"}`}>
+              <div className={`flex items-center gap-3 border-b px-5 py-2.5 transition-all duration-200 ${
+                isByeMatch ? "border-amber-400/30" : phase === "locked" ? "border-white/20" : "border-zinc-700"
+              }`}>
                 <span className="w-5 text-center text-xs font-bold text-zinc-500">{matchIdx * 2 + 1}</span>
-                <span className={`text-sm font-semibold transition-all duration-200 ${phase === "locked" ? "text-white" : "text-zinc-300"}`}>{home ?? "—"}</span>
+                <span className={`text-sm font-semibold transition-all duration-200 ${
+                  isByeMatch
+                    ? "text-amber-300"
+                    : phase === "locked" ? "text-white" : "text-zinc-300"
+                }`}>
+                  {home ?? "—"}
+                </span>
+                {isByeMatch && (
+                  <span className="ml-auto rounded-full bg-amber-400/20 px-2.5 py-0.5 text-xs font-bold tracking-wide text-amber-300">
+                    LUCKY BASTARD BYE
+                  </span>
+                )}
               </div>
               <div className="flex items-center gap-3 px-5 py-2.5">
                 <span className="w-5 text-center text-xs font-bold text-zinc-500">{matchIdx * 2 + 2}</span>
-                <span className={`text-sm font-semibold transition-all duration-200 ${phase === "locked" ? "text-white" : "text-zinc-300"}`}>{away ?? "—"}</span>
+                <span className={`text-sm font-semibold transition-all duration-200 ${
+                  isByeMatch
+                    ? "italic text-zinc-600"
+                    : phase === "locked" ? "text-white" : "text-zinc-300"
+                }`}>
+                  {isByeMatch ? "— no opponent —" : (away ?? "—")}
+                </span>
               </div>
             </div>
           );

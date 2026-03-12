@@ -34,6 +34,22 @@ function shuffleWithUniqueMatchups<T extends { id: string }>(
   return shuffle(teams);
 }
 
+// Pick bye teams, preferring those who haven't had a bye yet
+function pickByeTeams<T extends { id: string }>(
+  teams: T[],
+  numByes: number,
+  byeHistory: Map<string, number>
+): T[] {
+  if (numByes <= 0) return [];
+
+  // Sort teams by bye count (ascending), then shuffle within same count for randomness
+  const sorted = shuffle([...teams]).sort(
+    (a, b) => (byeHistory.get(a.id) ?? 0) - (byeHistory.get(b.id) ?? 0)
+  );
+
+  return sorted.slice(0, numByes);
+}
+
 export async function POST(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -62,12 +78,21 @@ export async function POST(
   const n = teams.length;
   const totalRounds = Math.ceil(Math.log2(n));
   const bracketSize = Math.pow(2, totalRounds);
+  const numByes = bracketSize - n;
 
   // Track pairings across games to ensure unique matchups
   const usedPairings = new Set<string>();
 
+  // Track bye history across games: teamId -> number of byes received
+  const byeHistory = new Map<string, number>();
+
   // Store per-game seed orders to send to the client for animation
-  const seedOrders: { gameId: string; gameName: string; teams: { id: string; name: string }[] }[] = [];
+  const seedOrders: {
+    gameId: string;
+    gameName: string;
+    teams: { id: string; name: string }[];
+    byeTeamIds: string[];
+  }[] = [];
 
   const allMatchData: {
     tournamentId: string;
@@ -83,21 +108,37 @@ export async function POST(
   for (const tg of tournament.games) {
     const gameId = tg.gameId;
 
-    // Shuffle with unique matchups per game
-    const shuffledTeams = shuffleWithUniqueMatchups(teams, usedPairings);
+    // Pick which teams get a bye this game (rotate across games)
+    const byeTeams = pickByeTeams(teams, numByes, byeHistory);
+    const byeTeamIds = new Set(byeTeams.map((t) => t.id));
 
-    // Record this game's pairings
-    for (let i = 0; i < shuffledTeams.length - 1; i += 2) {
-      const pairKey = [shuffledTeams[i].id, shuffledTeams[i + 1].id]
+    // Update bye history
+    for (const bt of byeTeams) {
+      byeHistory.set(bt.id, (byeHistory.get(bt.id) ?? 0) + 1);
+    }
+
+    // Playing teams (non-bye) get shuffled with unique matchup constraint
+    const playingTeams = teams.filter((t) => !byeTeamIds.has(t.id));
+    const shuffledPlaying = shuffleWithUniqueMatchups(playingTeams, usedPairings);
+
+    // Record this game's pairings (only playing teams, not byes)
+    for (let i = 0; i < shuffledPlaying.length - 1; i += 2) {
+      const pairKey = [shuffledPlaying[i].id, shuffledPlaying[i + 1].id]
         .sort()
         .join("-");
       usedPairings.add(pairKey);
     }
 
+    // Final team order: playing teams first, then bye teams at the end
+    // Bye teams end up in slots with null opponents and auto-advance
+    const shuffledByeTeams = shuffle([...byeTeams]);
+    const finalOrder = [...shuffledPlaying, ...shuffledByeTeams];
+
     seedOrders.push({
       gameId,
       gameName: tg.game.name,
-      teams: shuffledTeams.map((t) => ({ id: t.id, name: t.name })),
+      teams: finalOrder.map((t) => ({ id: t.id, name: t.name })),
+      byeTeamIds: shuffledByeTeams.map((t) => t.id),
     });
 
     // Create all match slots for every round
@@ -123,13 +164,14 @@ export async function POST(
     for (let i = 0; i < round1.length; i++) {
       const homeIdx = i * 2;
       const awayIdx = i * 2 + 1;
-      round1[i].homeTeamId = homeIdx < n ? shuffledTeams[homeIdx].id : null;
-      round1[i].awayTeamId = awayIdx < n ? shuffledTeams[awayIdx].id : null;
+      round1[i].homeTeamId = homeIdx < finalOrder.length ? finalOrder[homeIdx].id : null;
+      round1[i].awayTeamId = awayIdx < finalOrder.length ? finalOrder[awayIdx].id : null;
 
       const hasHome = round1[i].homeTeamId !== null;
       const hasAway = round1[i].awayTeamId !== null;
 
       if (hasHome && !hasAway) {
+        // Bye: team auto-advances
         round1[i].winnerId = round1[i].homeTeamId;
         round1[i].status = "completed";
         if (totalRounds > 1) {
