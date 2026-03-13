@@ -799,81 +799,83 @@ export default function TVPage({
       ) : (
         /* ===== REGULAR GAMES SCREEN ===== */
         <>
-          {/* Full screen layout */}
-          <div className="flex flex-1 flex-col">
-          {/* Header */}
-          <div className="flex shrink-0 items-center justify-between px-8 pt-3">
-            <div className="flex items-center gap-6">
-              <div>
-                <h1 className="text-3xl font-black tracking-tight">
-                  {tournament.name}
-                </h1>
-                <p className="text-sm text-zinc-500">Beer Olympics</p>
+          {/* Full screen layout — 3 evenly spaced sections */}
+          <div className="flex flex-1 flex-col justify-evenly px-8">
+
+          {/* Section 1: Header */}
+          <div>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-6">
+                <div>
+                  <h1 className="text-3xl font-black tracking-tight">
+                    {tournament.name}
+                  </h1>
+                  <p className="text-sm text-zinc-500">Beer Olympics</p>
+                </div>
+                {/* Tabs */}
+                <div className="flex gap-1 rounded-lg bg-zinc-900 p-1">
+                  {(["games", "rules", "brackets"] as const).map((tab) => (
+                    <button
+                      key={tab}
+                      onClick={() => setTvTab(tab)}
+                      className={`rounded-md px-3 py-1 text-xs font-semibold capitalize transition-colors ${
+                        tvTab === tab
+                          ? "bg-zinc-700 text-white"
+                          : "text-zinc-500 hover:text-zinc-300"
+                      }`}
+                    >
+                      {tab}
+                    </button>
+                  ))}
+                </div>
               </div>
-              {/* Tabs */}
-              <div className="flex gap-1 rounded-lg bg-zinc-900 p-1">
-                {(["games", "rules", "brackets"] as const).map((tab) => (
-                  <button
-                    key={tab}
-                    onClick={() => setTvTab(tab)}
-                    className={`rounded-md px-3 py-1 text-xs font-semibold capitalize transition-colors ${
-                      tvTab === tab
-                        ? "bg-zinc-700 text-white"
-                        : "text-zinc-500 hover:text-zinc-300"
-                    }`}
-                  >
-                    {tab}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="flex items-center gap-4">
-              {/* QR Codes */}
-              <div className="flex items-center gap-3">
-                {tournament.spotifyJamUrl && (
+              <div className="flex items-center gap-4">
+                {/* QR Codes */}
+                <div className="flex items-center gap-3">
+                  {tournament.spotifyJamUrl && (
+                    <div className="flex flex-col items-center">
+                      <div className="rounded-md bg-white p-1.5">
+                        <QRCodeSVG value={tournament.spotifyJamUrl} size={56} />
+                      </div>
+                      <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-wider text-emerald-500">
+                        Spotify Jam
+                      </p>
+                    </div>
+                  )}
                   <div className="flex flex-col items-center">
                     <div className="rounded-md bg-white p-1.5">
-                      <QRCodeSVG value={tournament.spotifyJamUrl} size={56} />
+                      <QRCodeSVG value={tournamentUrl} size={56} />
                     </div>
-                    <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-wider text-emerald-500">
-                      Spotify Jam
+                    <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-wider text-zinc-500">
+                      Scorekeeper
                     </p>
                   </div>
-                )}
-                <div className="flex flex-col items-center">
-                  <div className="rounded-md bg-white p-1.5">
-                    <QRCodeSVG value={tournamentUrl} size={56} />
-                  </div>
-                  <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-wider text-zinc-500">
-                    Scorekeeper
+                </div>
+                <div className="text-right">
+                  <p className="text-2xl font-bold tabular-nums">
+                    {completedMatches.length}
+                    <span className="text-zinc-600">/{realMatches.length}</span>
+                  </p>
+                  <p className="text-xs uppercase tracking-wide text-zinc-500">
+                    Matches Complete
                   </p>
                 </div>
               </div>
-              <div className="text-right">
-                <p className="text-2xl font-bold tabular-nums">
-                  {completedMatches.length}
-                  <span className="text-zinc-600">/{realMatches.length}</span>
-                </p>
-                <p className="text-xs uppercase tracking-wide text-zinc-500">
-                  Matches Complete
-                </p>
-              </div>
+            </div>
+            {/* Progress bar */}
+            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-zinc-800">
+              <div
+                className="h-full rounded-full bg-emerald-500 transition-all duration-700"
+                style={{
+                  width: `${realMatches.length > 0 ? (completedMatches.length / realMatches.length) * 100 : 0}%`,
+                }}
+              />
             </div>
           </div>
 
-          {/* Progress bar */}
-          <div className="mx-8 mt-2 h-1.5 shrink-0 overflow-hidden rounded-full bg-zinc-800">
-            <div
-              className="h-full rounded-full bg-emerald-500 transition-all duration-700"
-              style={{
-                width: `${realMatches.length > 0 ? (completedMatches.length / realMatches.length) * 100 : 0}%`,
-              }}
-            />
-          </div>
-
           {/* Tab content */}
-          {tvTab === "games" && (
-          <div className="flex min-h-0 flex-1 flex-col justify-between px-8 pb-3">
+          {tvTab === "games" && (<>
+          {/* Section 2: Game Stations */}
             <div className={`grid gap-3 ${
               gameStations.length <= 2
                 ? "grid-cols-2"
@@ -976,9 +978,9 @@ export default function TVPage({
               })}
             </div>
 
-            {/* Standings */}
-            <div className="mt-2 shrink-0 pb-2">
-              <h2 className="mb-1.5 text-xs font-bold uppercase tracking-widest text-zinc-500">
+          {/* Section 3: Standings */}
+            <div>
+              <h2 className="mb-2 text-xs font-bold uppercase tracking-widest text-zinc-500">
                 Standings
               </h2>
               <div className="flex gap-2 overflow-x-auto">
@@ -1012,50 +1014,49 @@ export default function TVPage({
                 ))}
               </div>
             </div>
-          </div>
-          )}
+          </>)}
 
           {/* Rules tab */}
           {tvTab === "rules" && (
-          <div className="flex-1 overflow-y-auto px-8 pb-4 pt-4">
-            {gamesWithRules.length > 0 ? (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {gamesWithRules.map((game) => (
-                  <div
-                    key={game.id}
-                    className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4"
-                  >
-                    <h3 className="text-sm font-bold text-zinc-300">{game.name}</h3>
-                    <p className="mt-2 whitespace-pre-wrap text-xs text-zinc-500">
-                      {game.rules}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-center text-sm text-zinc-600">No game rules have been set.</p>
-            )}
-          </div>
+            <div className="flex flex-1 items-start overflow-y-auto">
+              {gamesWithRules.length > 0 ? (
+                <div className="grid w-full gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {gamesWithRules.map((game) => (
+                    <div
+                      key={game.id}
+                      className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4"
+                    >
+                      <h3 className="text-sm font-bold text-zinc-300">{game.name}</h3>
+                      <p className="mt-2 whitespace-pre-wrap text-xs text-zinc-500">
+                        {game.rules}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="w-full text-center text-sm text-zinc-600">No game rules have been set.</p>
+              )}
+            </div>
           )}
 
           {/* Brackets tab */}
           {tvTab === "brackets" && (
-          <div className="flex-1 overflow-y-auto px-8 pb-4 pt-4">
-            <div className="flex flex-col gap-8">
-              {tournament.games.map((tg) => {
-                const gameMatches = tournament.matches.filter(
-                  (m) => m.gameId === tg.gameId && !m.isFinals
-                );
-                const totalRounds = Math.ceil(Math.log2(tournament.teams.length));
-                return (
-                  <div key={tg.gameId}>
-                    <h3 className="mb-3 text-base font-bold">{tg.game.name}</h3>
-                    <TVBracket matches={gameMatches} totalRounds={totalRounds} />
-                  </div>
-                );
-              })}
+            <div className="flex flex-1 items-start overflow-y-auto">
+              <div className="flex w-full flex-col gap-8">
+                {tournament.games.map((tg) => {
+                  const gameMatches = tournament.matches.filter(
+                    (m) => m.gameId === tg.gameId && !m.isFinals
+                  );
+                  const totalRounds = Math.ceil(Math.log2(tournament.teams.length));
+                  return (
+                    <div key={tg.gameId}>
+                      <h3 className="mb-3 text-base font-bold">{tg.game.name}</h3>
+                      <TVBracket matches={gameMatches} totalRounds={totalRounds} />
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-          </div>
           )}
           </div>
         </>
