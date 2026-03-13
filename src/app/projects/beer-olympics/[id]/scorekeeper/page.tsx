@@ -191,12 +191,20 @@ export default function ScorekeeperPage({
   return (
     <div className="min-h-screen px-6 py-16">
       <div className="mx-auto max-w-xl">
-        <Link
-          href={`/projects/beer-olympics/${id}/bracket`}
-          className="text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200"
-        >
-          &larr; Bracket View
-        </Link>
+        <div className="flex items-center justify-between">
+          <Link
+            href={`/projects/beer-olympics/${id}/bracket`}
+            className="text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200"
+          >
+            &larr; Bracket View
+          </Link>
+          <Link
+            href={`/projects/beer-olympics/${id}/tv`}
+            className="rounded-full border border-zinc-300 px-3 py-1 text-xs font-medium text-zinc-500 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
+          >
+            TV View
+          </Link>
+        </div>
         <h1 className="mt-6 text-4xl font-bold tracking-tight">
           Scorekeeper
         </h1>
