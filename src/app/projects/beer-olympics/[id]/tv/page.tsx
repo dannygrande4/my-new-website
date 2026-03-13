@@ -423,34 +423,48 @@ export default function TVPage({
     .filter((g) => g.rules);
 
   return (
+    <>
     <div className="relative min-h-screen overflow-hidden bg-zinc-950 text-white">
-      {/* Now Playing bar */}
+      {/* Now Playing — prominent album art header */}
       {nowPlaying?.playing && nowPlaying.track && (
-        <div className="fixed bottom-0 left-0 right-0 z-40 flex items-center gap-4 border-t border-zinc-800 bg-zinc-950/95 px-6 py-3 backdrop-blur-sm">
-          {nowPlaying.track.albumArt && (
-            <img
-              src={nowPlaying.track.albumArt}
-              alt=""
-              className="h-10 w-10 rounded"
-            />
+        <div className="relative h-48 w-full overflow-hidden">
+          {nowPlaying.track.albumArt ? (
+            <>
+              <img
+                src={nowPlaying.track.albumArt}
+                alt=""
+                className="absolute inset-0 h-full w-full object-cover"
+              />
+              <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/50 to-zinc-950" />
+            </>
+          ) : (
+            <div className="absolute inset-0 bg-gradient-to-b from-emerald-950/60 to-zinc-950" />
           )}
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold text-white">
-              {nowPlaying.track.name}
-            </p>
-            <p className="truncate text-xs text-zinc-400">
-              {nowPlaying.track.artist}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
-            <span className="text-xs font-medium text-emerald-500">
-              Now Playing
-            </span>
+          <div className="relative flex h-full items-end px-12 pb-5">
+            {nowPlaying.track.albumArt && (
+              <img
+                src={nowPlaying.track.albumArt}
+                alt=""
+                className="mr-5 h-24 w-24 shrink-0 rounded-lg shadow-2xl"
+              />
+            )}
+            <div className="min-w-0 flex-1">
+              <div className="mb-1 flex items-center gap-2">
+                <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
+                <span className="text-xs font-semibold uppercase tracking-widest text-emerald-400">
+                  Now Playing
+                </span>
+              </div>
+              <p className="truncate text-2xl font-black text-white drop-shadow-lg">
+                {nowPlaying.track.name}
+              </p>
+              <p className="truncate text-sm font-medium text-white/70">
+                {nowPlaying.track.artist}
+              </p>
+            </div>
           </div>
         </div>
       )}
-
       {/* Win notification overlay */}
       {winEvent && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -998,6 +1012,7 @@ export default function TVPage({
         </>
       )}
     </div>
+    </>
   );
 }
 
