@@ -154,7 +154,7 @@ export async function GET(request: NextRequest) {
     },
   });
 
-  // Success — show confirmation and auto-close the tab
+  // Success — show confirmation with close button
   return new NextResponse(
     `<!DOCTYPE html>
 <html>
@@ -164,15 +164,17 @@ export async function GET(request: NextRequest) {
   body { font-family: system-ui, sans-serif; background: #09090b; color: #fafafa; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 24px; }
   .card { max-width: 420px; text-align: center; }
   h1 { font-size: 1.5rem; color: #10b981; margin-bottom: 12px; }
-  p { color: #a1a1aa; line-height: 1.6; }
+  p { color: #a1a1aa; line-height: 1.6; margin-bottom: 24px; }
+  a { display: inline-block; background: #10b981; color: #fafafa; text-decoration: none; padding: 10px 24px; border-radius: 9999px; font-size: 0.875rem; font-weight: 500; }
+  a:hover { background: #059669; }
 </style>
 </head>
 <body>
   <div class="card">
     <h1>Spotify Connected!</h1>
-    <p>You can close this tab. The scorekeeper will update automatically.</p>
+    <p>Your Spotify account is now linked. The currently playing song will appear on the TV view.</p>
+    <a href="javascript:void(0)" onclick="window.close(); return false;">Close This Tab</a>
   </div>
-  <script>window.close();</script>
 </body>
 </html>`,
     { status: 200, headers: { "Content-Type": "text/html" } }
