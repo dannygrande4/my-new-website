@@ -1015,7 +1015,7 @@ export default function TVPage({
 
           {/* Rules tab */}
           {tvTab === "rules" && (
-            <div className="flex flex-1 items-start overflow-y-auto">
+            <div className="min-h-0 flex-1 overflow-y-auto">
               {gamesWithRules.length > 0 ? (
                 <div className="grid w-full gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   {gamesWithRules.map((game) => (
@@ -1038,8 +1038,8 @@ export default function TVPage({
 
           {/* Brackets tab */}
           {tvTab === "brackets" && (
-            <div className="flex flex-1 items-start overflow-y-auto">
-              <div className="flex w-full flex-col gap-8">
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <div className="flex flex-col gap-8">
                 {tournament.games.map((tg) => {
                   const gameMatches = tournament.matches.filter(
                     (m) => m.gameId === tg.gameId && !m.isFinals
