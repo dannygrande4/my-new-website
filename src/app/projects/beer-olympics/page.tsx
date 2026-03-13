@@ -125,11 +125,11 @@ export default function BeerOlympics() {
                     href={
                       t.status === "setup"
                         ? `/projects/beer-olympics/${t.id}`
-                        : `/projects/beer-olympics/${t.id}/bracket`
+                        : `/projects/beer-olympics/${t.id}/scorekeeper`
                     }
                     className="mt-3 inline-block text-sm font-medium hover:underline"
                   >
-                    {t.status === "setup" ? "Open Setup" : "View Bracket"} &rarr;
+                    {t.status === "setup" ? "Open Setup" : "Open Scorekeeper"} &rarr;
                   </Link>
                 </div>
               ))}

@@ -36,6 +36,8 @@ export default function TournamentSetup({
   const [teamName, setTeamName] = useState("");
   const [memberName, setMemberName] = useState("");
   const [currentMembers, setCurrentMembers] = useState<string[]>([]);
+  const [newGameName, setNewGameName] = useState("");
+  const [creatingGame, setCreatingGame] = useState(false);
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
 
@@ -50,9 +52,9 @@ export default function TournamentSetup({
       const data = await res.json();
       setTournament(data);
       setSelectedGameIds(data.games.map((g: { gameId: string }) => g.gameId));
-      // Redirect to bracket if already started
+      // Redirect to scorekeeper if already started
       if (data.status === "in_progress" || data.status === "completed") {
-        router.replace(`/projects/beer-olympics/${id}/bracket`);
+        router.replace(`/projects/beer-olympics/${id}/scorekeeper`);
       }
     }
     setLoading(false);
@@ -63,6 +65,35 @@ export default function TournamentSetup({
     if (res.ok) {
       setAllGames(await res.json());
     }
+  }
+
+  async function createGame() {
+    const trimmed = newGameName.trim();
+    if (!trimmed) return;
+    setCreatingGame(true);
+    const res = await fetch("/api/games", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: trimmed }),
+    });
+    if (res.ok) {
+      const game = await res.json();
+      setNewGameName("");
+      await fetchGames();
+      // Auto-select the newly created game
+      const updated = [...selectedGameIds, game.id];
+      setSelectedGameIds(updated);
+      await fetch(`/api/tournaments/${id}/games`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ gameIds: updated }),
+      });
+      fetchTournament();
+    } else {
+      const data = await res.json();
+      alert(data.error || "Failed to create game");
+    }
+    setCreatingGame(false);
   }
 
   async function toggleGame(gameId: string) {
@@ -120,9 +151,7 @@ export default function TournamentSetup({
     });
     if (res.ok) {
       const data = await res.json();
-      // Store seed orders for the shuffle animation
-      sessionStorage.setItem(`seedOrders-${id}`, JSON.stringify(data.seedOrders));
-      router.push(`/projects/beer-olympics/${id}/bracket?animate=true`);
+      router.push(`/projects/beer-olympics/${id}/scorekeeper`);
     } else {
       const data = await res.json();
       alert(data.error || "Failed to start tournament");
@@ -184,6 +213,23 @@ export default function TournamentSetup({
                 </button>
               );
             })}
+          </div>
+          <div className="mt-3 flex gap-2">
+            <input
+              type="text"
+              placeholder="Add custom game..."
+              value={newGameName}
+              onChange={(e) => setNewGameName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && createGame()}
+              className="flex-1 rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:focus:border-zinc-500"
+            />
+            <button
+              onClick={createGame}
+              disabled={!newGameName.trim() || creatingGame}
+              className="rounded-md bg-zinc-200 px-4 py-2 text-sm font-medium transition-colors hover:bg-zinc-300 disabled:opacity-40 dark:bg-zinc-800 dark:hover:bg-zinc-700"
+            >
+              {creatingGame ? "Adding..." : "Add"}
+            </button>
           </div>
         </section>
 

@@ -215,10 +215,10 @@ export default function ScorekeeperPage({
       <div className="mx-auto max-w-xl">
         <div className="flex items-center justify-between">
           <Link
-            href={`/projects/beer-olympics/${id}/bracket`}
+            href="/projects/beer-olympics"
             className="text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200"
           >
-            &larr; Bracket View
+            &larr; Tournaments
           </Link>
           <Link
             href={`/projects/beer-olympics/${id}/tv`}
