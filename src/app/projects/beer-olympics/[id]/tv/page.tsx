@@ -468,7 +468,7 @@ export default function TVPage({
     <div className="relative flex min-h-screen flex-col overflow-hidden bg-zinc-950 text-white">
       {/* Now Playing — prominent album art header */}
       {nowPlaying?.playing && nowPlaying.track && (
-        <div className="relative h-32 w-full overflow-hidden">
+        <div className="relative h-44 w-full overflow-hidden">
           {nowPlaying.track.albumArt ? (
             <>
               <img
