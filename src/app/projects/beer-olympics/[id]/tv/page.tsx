@@ -93,8 +93,7 @@ export default function TVPage({
   const [loading, setLoading] = useState(true);
   const [winEvent, setWinEvent] = useState<WinEvent | null>(null);
   const prevMatchStatesRef = useRef<Map<string, string>>(new Map());
-  const winQueueRef = useRef<WinEvent[]>([]);
-  const showingWinRef = useRef(false);
+  const winTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchTournament = useCallback(async () => {
     try {
@@ -167,22 +166,20 @@ export default function TVPage({
     []
   );
 
-  // Process win queue one at a time
-  const processWinQueue = useCallback(() => {
-    if (showingWinRef.current) return;
-    const next = winQueueRef.current.shift();
-    if (!next) return;
+  // Show only the latest win — if multiple arrive, skip to the newest
+  const showWin = useCallback((win: WinEvent) => {
+    // Clear any existing timeout
+    if (winTimeoutRef.current) {
+      clearTimeout(winTimeoutRef.current);
+    }
 
-    showingWinRef.current = true;
-    setWinEvent(next);
-    fireConfetti(next.isChampion);
+    setWinEvent(win);
+    fireConfetti(win.isChampion);
 
-    setTimeout(() => {
+    winTimeoutRef.current = setTimeout(() => {
       setWinEvent(null);
-      showingWinRef.current = false;
-      // Process next in queue
-      processWinQueue();
-    }, next.isChampion ? 8000 : 5000);
+      winTimeoutRef.current = null;
+    }, win.isChampion ? 6000 : 3500);
   }, []);
 
   // Initial load
@@ -209,14 +206,14 @@ export default function TVPage({
       if (data) {
         const newWins = detectNewWins(data);
         if (newWins.length > 0) {
-          winQueueRef.current.push(...newWins);
-          processWinQueue();
+          // Show only the last win (most recent), skip the rest
+          showWin(newWins[newWins.length - 1]);
         }
       }
     }, 2000);
 
     return () => clearInterval(interval);
-  }, [loading, fetchTournament, detectNewWins, processWinQueue]);
+  }, [loading, fetchTournament, detectNewWins, showWin]);
 
   if (loading) {
     return (
