@@ -200,7 +200,7 @@ function BracketShuffleAnimation({
                 </span>
                 {isBye && (
                   <span className="ml-auto rounded-full bg-amber-400/20 px-2.5 py-0.5 text-xs font-bold tracking-wide text-amber-300">
-                    LUCKY BASTARD BYE
+                    BYE
                   </span>
                 )}
               </div>
