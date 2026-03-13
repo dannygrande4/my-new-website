@@ -764,7 +764,7 @@ export default function TVPage({
           <div className="flex flex-1 flex-col justify-evenly gap-4 px-8 py-4">
 
           {/* Section 1: Header (with album art background when playing) */}
-          <div className="relative overflow-hidden rounded-2xl">
+          <div className="relative h-[33vh] overflow-hidden rounded-2xl">
             {/* Album art background */}
             {nowPlaying?.playing && nowPlaying.track?.albumArt && (
               <>
@@ -776,7 +776,7 @@ export default function TVPage({
                 <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/70 to-black/60" />
               </>
             )}
-            <div className="relative flex flex-col gap-3 p-4">
+            <div className="relative flex h-full flex-col justify-center gap-3 p-4">
               {/* Now playing + title row */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-5">
