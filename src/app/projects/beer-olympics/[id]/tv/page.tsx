@@ -96,6 +96,7 @@ export default function TVPage({
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
+  const [tvTab, setTvTab] = useState<"games" | "rules" | "brackets">("games");
   const [winEvent, setWinEvent] = useState<WinEvent | null>(null);
   const [nowPlaying, setNowPlaying] = useState<{
     playing: boolean;
@@ -798,15 +799,33 @@ export default function TVPage({
       ) : (
         /* ===== REGULAR GAMES SCREEN ===== */
         <>
-          {/* First fold — fills remaining viewport after spotify */}
+          {/* Full screen layout */}
           <div className="flex flex-1 flex-col">
           {/* Header */}
           <div className="flex shrink-0 items-center justify-between px-8 pt-3">
-            <div>
-              <h1 className="text-3xl font-black tracking-tight">
-                {tournament.name}
-              </h1>
-              <p className="text-sm text-zinc-500">Beer Olympics</p>
+            <div className="flex items-center gap-6">
+              <div>
+                <h1 className="text-3xl font-black tracking-tight">
+                  {tournament.name}
+                </h1>
+                <p className="text-sm text-zinc-500">Beer Olympics</p>
+              </div>
+              {/* Tabs */}
+              <div className="flex gap-1 rounded-lg bg-zinc-900 p-1">
+                {(["games", "rules", "brackets"] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setTvTab(tab)}
+                    className={`rounded-md px-3 py-1 text-xs font-semibold capitalize transition-colors ${
+                      tvTab === tab
+                        ? "bg-zinc-700 text-white"
+                        : "text-zinc-500 hover:text-zinc-300"
+                    }`}
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="flex items-center gap-4">
               {/* QR Codes */}
@@ -852,7 +871,8 @@ export default function TVPage({
             />
           </div>
 
-          {/* Game stations */}
+          {/* Tab content */}
+          {tvTab === "games" && (
           <div className="flex min-h-0 flex-1 flex-col justify-between px-8 pb-3">
             <div className={`grid gap-3 ${
               gameStations.length <= 2
@@ -993,15 +1013,13 @@ export default function TVPage({
               </div>
             </div>
           </div>
-          </div>
+          )}
 
-          {/* Game Rules */}
-          {gamesWithRules.length > 0 && (
-            <div className="px-12 pb-8">
-              <h2 className="mb-4 text-sm font-bold uppercase tracking-widest text-zinc-500">
-                Game Rules
-              </h2>
-              <div className="grid gap-4 sm:grid-cols-2">
+          {/* Rules tab */}
+          {tvTab === "rules" && (
+          <div className="flex-1 overflow-y-auto px-8 pb-4 pt-4">
+            {gamesWithRules.length > 0 ? (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {gamesWithRules.map((game) => (
                   <div
                     key={game.id}
@@ -1014,14 +1032,15 @@ export default function TVPage({
                   </div>
                 ))}
               </div>
-            </div>
+            ) : (
+              <p className="text-center text-sm text-zinc-600">No game rules have been set.</p>
+            )}
+          </div>
           )}
 
-          {/* Brackets */}
-          <div className="mt-4 px-12 pb-12">
-            <h2 className="mb-4 text-sm font-bold uppercase tracking-widest text-zinc-500">
-              Brackets
-            </h2>
+          {/* Brackets tab */}
+          {tvTab === "brackets" && (
+          <div className="flex-1 overflow-y-auto px-8 pb-4 pt-4">
             <div className="flex flex-col gap-8">
               {tournament.games.map((tg) => {
                 const gameMatches = tournament.matches.filter(
@@ -1036,6 +1055,8 @@ export default function TVPage({
                 );
               })}
             </div>
+          </div>
+          )}
           </div>
         </>
       )}
