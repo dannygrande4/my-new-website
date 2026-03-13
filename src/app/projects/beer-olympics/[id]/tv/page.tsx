@@ -481,15 +481,15 @@ export default function TVPage({
           ) : (
             <div className="absolute inset-0 bg-gradient-to-b from-emerald-950/60 to-zinc-950" />
           )}
-          <div className="relative flex h-full items-end px-8 pb-3">
+          <div className="relative flex h-full items-end gap-4 px-8 py-2">
             {nowPlaying.track.albumArt && (
               <img
                 src={nowPlaying.track.albumArt}
                 alt=""
-                className="mr-4 h-18 w-18 shrink-0 rounded-lg shadow-2xl"
+                className="h-full shrink-0 self-stretch rounded-lg object-cover shadow-2xl"
               />
             )}
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0 flex-1 pb-1">
               <div className="mb-0.5 flex items-center gap-1.5">
                 <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
                 <span className="text-[10px] font-semibold uppercase tracking-widest text-emerald-400">
@@ -979,7 +979,7 @@ export default function TVPage({
             </div>
 
           {/* Section 3: Standings */}
-            <div>
+            <div className="flex flex-col items-center">
               <h2 className="mb-2 text-xs font-bold uppercase tracking-widest text-zinc-500">
                 Standings
               </h2>
