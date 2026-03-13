@@ -610,8 +610,8 @@ export default function TVPage({
             );
           })}
 
-          {/* Finals station */}
-          {finalsStation && (
+          {/* Finals station — only show when finals are active */}
+          {finalsStation && finalsStation.status !== "waiting" && (
             <div
               className={`rounded-2xl border p-6 transition-all ${
                 finalsStation.status === "playing"
