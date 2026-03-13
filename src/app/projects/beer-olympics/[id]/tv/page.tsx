@@ -800,7 +800,7 @@ export default function TVPage({
         /* ===== REGULAR GAMES SCREEN ===== */
         <>
           {/* Full screen layout — 3 evenly spaced sections */}
-          <div className="flex flex-1 flex-col justify-evenly px-8">
+          <div className="flex flex-1 flex-col justify-evenly gap-4 px-8 py-4">
 
           {/* Section 1: Header */}
           <div>
