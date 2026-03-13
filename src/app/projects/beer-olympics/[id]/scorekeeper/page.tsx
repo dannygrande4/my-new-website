@@ -38,6 +38,8 @@ interface Tournament {
   name: string;
   status: string;
   spotifyJamUrl: string | null;
+  spotifyAccessToken: string | null;
+  spotifyRefreshToken: string | null;
   teams: Team[];
   games: { gameId: string; game: Game }[];
   matches: Match[];
@@ -124,6 +126,15 @@ export default function ScorekeeperPage({
       body: JSON.stringify({ spotifyJamUrl: spotifyUrl }),
     });
     setEditingSpotify(false);
+    fetchTournament();
+  }
+
+  async function disconnectSpotify() {
+    await fetch("/api/spotify/disconnect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tournamentId: id }),
+    });
     fetchTournament();
   }
 
@@ -352,6 +363,40 @@ export default function ScorekeeperPage({
               </p>
             ) : (
               <p className="mt-1 text-sm text-zinc-400">Not set</p>
+            )}
+          </div>
+
+          {/* Spotify Now Playing Connection */}
+          <div className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                Spotify Now Playing
+              </p>
+              {tournament.spotifyAccessToken && (
+                <button
+                  onClick={disconnectSpotify}
+                  className="text-xs text-red-500"
+                >
+                  Disconnect
+                </button>
+              )}
+            </div>
+            {tournament.spotifyAccessToken ? (
+              <p className="mt-1 text-sm text-emerald-600 dark:text-emerald-400">
+                Connected — currently playing track will show on TV
+              </p>
+            ) : (
+              <div className="mt-2">
+                <p className="text-sm text-zinc-400">
+                  Connect your Spotify to show the currently playing song on TV.
+                </p>
+                <a
+                  href={`/api/spotify?tournamentId=${id}`}
+                  className="mt-2 inline-block rounded-full bg-emerald-600 px-4 py-1.5 text-xs font-medium text-white transition-colors hover:bg-emerald-700"
+                >
+                  Connect Spotify
+                </a>
+              </div>
             )}
           </div>
         </div>

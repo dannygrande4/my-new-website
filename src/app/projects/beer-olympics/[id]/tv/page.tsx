@@ -96,6 +96,10 @@ export default function TVPage({
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [loading, setLoading] = useState(true);
   const [winEvent, setWinEvent] = useState<WinEvent | null>(null);
+  const [nowPlaying, setNowPlaying] = useState<{
+    playing: boolean;
+    track?: { name: string; artist: string; albumArt: string | null };
+  } | null>(null);
   const prevMatchStatesRef = useRef<Map<string, string>>(new Map());
   const winTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastWinTimeRef = useRef<number>(0);
@@ -224,6 +228,31 @@ export default function TVPage({
 
     return () => clearInterval(interval);
   }, [loading, fetchTournament, detectNewWins, showWin]);
+
+  // Poll Spotify now playing every 5 seconds
+  useEffect(() => {
+    if (loading) return;
+
+    const fetchNowPlaying = async () => {
+      try {
+        const res = await fetch(`/api/spotify/now-playing?tournamentId=${id}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.connected) {
+            setNowPlaying(data);
+          } else {
+            setNowPlaying(null);
+          }
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    fetchNowPlaying();
+    const interval = setInterval(fetchNowPlaying, 5000);
+    return () => clearInterval(interval);
+  }, [loading, id]);
 
   if (loading) {
     return (
@@ -391,6 +420,33 @@ export default function TVPage({
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-zinc-950 text-white">
+      {/* Now Playing bar */}
+      {nowPlaying?.playing && nowPlaying.track && (
+        <div className="fixed bottom-0 left-0 right-0 z-40 flex items-center gap-4 border-t border-zinc-800 bg-zinc-950/95 px-6 py-3 backdrop-blur-sm">
+          {nowPlaying.track.albumArt && (
+            <img
+              src={nowPlaying.track.albumArt}
+              alt=""
+              className="h-10 w-10 rounded"
+            />
+          )}
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold text-white">
+              {nowPlaying.track.name}
+            </p>
+            <p className="truncate text-xs text-zinc-400">
+              {nowPlaying.track.artist}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
+            <span className="text-xs font-medium text-emerald-500">
+              Now Playing
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Win notification overlay */}
       {winEvent && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
