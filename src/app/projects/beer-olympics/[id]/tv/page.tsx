@@ -798,6 +798,8 @@ export default function TVPage({
       ) : (
         /* ===== REGULAR GAMES SCREEN ===== */
         <>
+          {/* First fold — fits one screen */}
+          <div className="flex min-h-screen flex-col">
           {/* Header */}
           <div className="flex items-center justify-between px-8 pt-4">
             <div>
@@ -851,7 +853,7 @@ export default function TVPage({
           </div>
 
           {/* Game stations */}
-          <div className="mt-4 px-8">
+          <div className="mt-4 flex-1 px-8">
             <div className={`grid gap-3 ${
               gameStations.length <= 2
                 ? "grid-cols-2"
@@ -992,6 +994,7 @@ export default function TVPage({
                 ))}
               </div>
             </div>
+          </div>
           </div>
 
           {/* Game Rules */}
