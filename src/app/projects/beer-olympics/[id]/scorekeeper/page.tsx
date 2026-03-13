@@ -68,7 +68,7 @@ export default function ScorekeeperPage({
   const [generatingFinals, setGeneratingFinals] = useState(false);
   const [spotifyUrl, setSpotifyUrl] = useState("");
   const [editingSpotify, setEditingSpotify] = useState(false);
-  const [showQR, setShowQR] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [rulesGameId, setRulesGameId] = useState<string | null>(null);
 
   const fetchTournament = useCallback(async () => {
@@ -261,12 +261,20 @@ export default function ScorekeeperPage({
           >
             &larr; Tournaments
           </Link>
-          <Link
-            href={`/projects/beer-olympics/${id}/tv`}
-            className="rounded-full border border-zinc-300 px-3 py-1 text-xs font-medium text-zinc-500 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
-          >
-            TV View
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/projects/beer-olympics/${id}/tv`}
+              className="rounded-full border border-zinc-300 px-3 py-1 text-xs font-medium text-zinc-500 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
+            >
+              TV View
+            </Link>
+            <button
+              onClick={() => setShowSettings(true)}
+              className="rounded-full border border-zinc-300 px-3 py-1 text-xs font-medium text-zinc-500 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
+            >
+              Settings
+            </button>
+          </div>
         </div>
         <h1 className="mt-6 text-4xl font-bold tracking-tight">
           Scorekeeper
@@ -275,123 +283,158 @@ export default function ScorekeeperPage({
           {tournament.name}
         </p>
 
-        {/* QR Code + Spotify Section */}
-        <div className="mt-6 flex flex-col gap-3">
-          <button
-            onClick={() => setShowQR(!showQR)}
-            className="flex items-center gap-2 text-sm font-medium text-blue-600 dark:text-blue-400"
+        {/* Join Spotify Jam link */}
+        {tournament.spotifyJamUrl && (
+          <a
+            href={tournament.spotifyJamUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-4 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 transition-colors hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-900/20 dark:hover:bg-emerald-900/30"
           >
-            {showQR ? "Hide QR Codes" : "Show QR Codes"}
-          </button>
+            <span className="text-lg">🎵</span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
+                Join Spotify Jam
+              </p>
+              <p className="truncate text-xs text-emerald-600/70 dark:text-emerald-500/70">
+                Tap to queue up music
+              </p>
+            </div>
+            <span className="text-xs text-emerald-500">→</span>
+          </a>
+        )}
 
-          {showQR && (
-            <div className="flex flex-wrap gap-4">
-              {/* Tournament QR */}
-              <div className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
-                <p className="mb-2 text-center text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                  TV View
-                </p>
-                <QRCodeSVG value={tournamentUrl} size={120} />
+        {/* Settings Modal */}
+        {showSettings && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div
+              className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+              onClick={() => setShowSettings(false)}
+            />
+            <div className="relative max-h-[80vh] w-full max-w-md overflow-y-auto rounded-2xl border border-zinc-200 bg-white p-6 shadow-xl dark:border-zinc-700 dark:bg-zinc-900">
+              <div className="mb-6 flex items-center justify-between">
+                <h2 className="text-lg font-bold">Settings</h2>
+                <button
+                  onClick={() => setShowSettings(false)}
+                  className="rounded-full p-1 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                </button>
               </div>
 
-              {/* Spotify QR */}
-              {tournament.spotifyJamUrl && (
+              <div className="flex flex-col gap-4">
+                {/* QR Codes */}
                 <div className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
-                  <p className="mb-2 text-center text-xs font-semibold uppercase tracking-wide text-emerald-600 dark:text-emerald-400">
-                    Spotify Jam
+                  <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                    QR Codes
                   </p>
-                  <QRCodeSVG value={tournament.spotifyJamUrl} size={120} />
+                  <div className="flex flex-wrap gap-4">
+                    <div className="flex flex-col items-center">
+                      <QRCodeSVG value={tournamentUrl} size={100} />
+                      <p className="mt-1.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+                        TV View
+                      </p>
+                    </div>
+                    {tournament.spotifyJamUrl && (
+                      <div className="flex flex-col items-center">
+                        <QRCodeSVG value={tournament.spotifyJamUrl} size={100} />
+                        <p className="mt-1.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-500">
+                          Spotify Jam
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              )}
-            </div>
-          )}
 
-          {/* Spotify Jam URL */}
-          <div className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                Spotify Jam Link
-              </p>
-              {!editingSpotify && (
-                <button
-                  onClick={() => setEditingSpotify(true)}
-                  className="text-xs text-blue-500"
-                >
-                  {tournament.spotifyJamUrl ? "Edit" : "Add"}
-                </button>
-              )}
-            </div>
-            {editingSpotify ? (
-              <div className="mt-2 flex gap-2">
-                <input
-                  type="url"
-                  placeholder="https://spotify.link/..."
-                  value={spotifyUrl}
-                  onChange={(e) => setSpotifyUrl(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && saveSpotifyUrl()}
-                  className="flex-1 rounded-md border border-zinc-300 bg-transparent px-3 py-1.5 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700"
-                />
-                <button
-                  onClick={saveSpotifyUrl}
-                  className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white"
-                >
-                  Save
-                </button>
-                <button
-                  onClick={() => {
-                    setEditingSpotify(false);
-                    setSpotifyUrl(tournament.spotifyJamUrl || "");
-                  }}
-                  className="text-xs text-zinc-400"
-                >
-                  Cancel
-                </button>
-              </div>
-            ) : tournament.spotifyJamUrl ? (
-              <p className="mt-1 truncate text-sm text-emerald-600 dark:text-emerald-400">
-                {tournament.spotifyJamUrl}
-              </p>
-            ) : (
-              <p className="mt-1 text-sm text-zinc-400">Not set</p>
-            )}
-          </div>
+                {/* Spotify Jam URL */}
+                <div className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                      Spotify Jam Link
+                    </p>
+                    {!editingSpotify && (
+                      <button
+                        onClick={() => setEditingSpotify(true)}
+                        className="text-xs text-blue-500"
+                      >
+                        {tournament.spotifyJamUrl ? "Edit" : "Add"}
+                      </button>
+                    )}
+                  </div>
+                  {editingSpotify ? (
+                    <div className="mt-2 flex gap-2">
+                      <input
+                        type="url"
+                        placeholder="https://spotify.link/..."
+                        value={spotifyUrl}
+                        onChange={(e) => setSpotifyUrl(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && saveSpotifyUrl()}
+                        className="flex-1 rounded-md border border-zinc-300 bg-transparent px-3 py-1.5 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700"
+                      />
+                      <button
+                        onClick={saveSpotifyUrl}
+                        className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white"
+                      >
+                        Save
+                      </button>
+                      <button
+                        onClick={() => {
+                          setEditingSpotify(false);
+                          setSpotifyUrl(tournament.spotifyJamUrl || "");
+                        }}
+                        className="text-xs text-zinc-400"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : tournament.spotifyJamUrl ? (
+                    <p className="mt-1 truncate text-sm text-emerald-600 dark:text-emerald-400">
+                      {tournament.spotifyJamUrl}
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-sm text-zinc-400">Not set</p>
+                  )}
+                </div>
 
-          {/* Spotify Now Playing Connection */}
-          <div className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                Spotify Now Playing
-              </p>
-              {tournament.spotifyAccessToken && (
-                <button
-                  onClick={disconnectSpotify}
-                  className="text-xs text-red-500"
-                >
-                  Disconnect
-                </button>
-              )}
-            </div>
-            {tournament.spotifyAccessToken ? (
-              <p className="mt-1 text-sm text-emerald-600 dark:text-emerald-400">
-                Connected — currently playing track will show on TV
-              </p>
-            ) : (
-              <div className="mt-2">
-                <p className="text-sm text-zinc-400">
-                  Connect your Spotify to show the currently playing song on TV.
-                </p>
-                <a
-                  href={`/api/spotify?tournamentId=${id}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-2 inline-block rounded-full bg-emerald-600 px-4 py-1.5 text-xs font-medium text-white transition-colors hover:bg-emerald-700"
-                >
-                  Connect Spotify
-                </a>
+                {/* Spotify Now Playing Connection */}
+                <div className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                      Spotify Now Playing
+                    </p>
+                    {tournament.spotifyAccessToken && (
+                      <button
+                        onClick={disconnectSpotify}
+                        className="text-xs text-red-500"
+                      >
+                        Disconnect
+                      </button>
+                    )}
+                  </div>
+                  {tournament.spotifyAccessToken ? (
+                    <p className="mt-1 text-sm text-emerald-600 dark:text-emerald-400">
+                      Connected — currently playing track will show on TV
+                    </p>
+                  ) : (
+                    <div className="mt-2">
+                      <p className="text-sm text-zinc-400">
+                        Connect your Spotify to show the currently playing song on TV.
+                      </p>
+                      <a
+                        href={`/api/spotify?tournamentId=${id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-2 inline-block rounded-full bg-emerald-600 px-4 py-1.5 text-xs font-medium text-white transition-colors hover:bg-emerald-700"
+                      >
+                        Connect Spotify
+                      </a>
+                    </div>
+                  )}
+                </div>
               </div>
-            )}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Game Rules */}
         <div className="mt-4">
