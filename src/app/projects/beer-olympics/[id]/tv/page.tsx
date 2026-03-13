@@ -481,7 +481,7 @@ export default function TVPage({
           ) : (
             <div className="absolute inset-0 bg-gradient-to-b from-emerald-950/60 to-zinc-950" />
           )}
-          <div className="relative flex h-full items-end gap-4 px-8 py-2">
+          <div className="relative flex h-full items-center gap-4 px-8 py-2">
             {nowPlaying.track.albumArt && (
               <img
                 src={nowPlaying.track.albumArt}
@@ -489,7 +489,7 @@ export default function TVPage({
                 className="h-full shrink-0 self-stretch rounded-lg object-cover shadow-2xl"
               />
             )}
-            <div className="min-w-0 flex-1 pb-1">
+            <div className="min-w-0 flex-1">
               <div className="mb-0.5 flex items-center gap-1.5">
                 <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
                 <span className="text-[10px] font-semibold uppercase tracking-widest text-emerald-400">
