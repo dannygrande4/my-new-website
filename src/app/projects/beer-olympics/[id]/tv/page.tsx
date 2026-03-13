@@ -94,6 +94,7 @@ export default function TVPage({
   const [winEvent, setWinEvent] = useState<WinEvent | null>(null);
   const prevMatchStatesRef = useRef<Map<string, string>>(new Map());
   const winTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastWinTimeRef = useRef<number>(0);
 
   const fetchTournament = useCallback(async () => {
     try {
@@ -166,8 +167,26 @@ export default function TVPage({
     []
   );
 
-  // Show only the latest win — if multiple arrive, skip to the newest
+  // Show win only if there hasn't been one in the last 4 seconds (rapid clicking = skip)
+  // Champion wins always show regardless
   const showWin = useCallback((win: WinEvent) => {
+    const now = Date.now();
+    const timeSinceLast = now - lastWinTimeRef.current;
+
+    // If wins are coming in rapidly (< 4s apart) and it's not a champion, skip it
+    if (!win.isChampion && timeSinceLast < 4000) {
+      // Clear any existing celebration immediately
+      if (winTimeoutRef.current) {
+        clearTimeout(winTimeoutRef.current);
+        winTimeoutRef.current = null;
+      }
+      setWinEvent(null);
+      lastWinTimeRef.current = now;
+      return;
+    }
+
+    lastWinTimeRef.current = now;
+
     // Clear any existing timeout
     if (winTimeoutRef.current) {
       clearTimeout(winTimeoutRef.current);
@@ -671,6 +690,36 @@ export default function TVPage({
         </div>
       </div>
 
+      {/* Brackets */}
+      <div className="mt-4 px-12 pb-12">
+        <h2 className="mb-4 text-sm font-bold uppercase tracking-widest text-zinc-500">
+          Brackets
+        </h2>
+        <div className="flex flex-col gap-8">
+          {tournament.games.map((tg) => {
+            const gameMatches = tournament.matches.filter(
+              (m) => m.gameId === tg.gameId && !m.isFinals
+            );
+            const totalRounds = Math.ceil(Math.log2(tournament.teams.length));
+            return (
+              <div key={tg.gameId}>
+                <h3 className="mb-3 text-base font-bold">{tg.game.name}</h3>
+                <TVBracket matches={gameMatches} totalRounds={totalRounds} />
+              </div>
+            );
+          })}
+          {finalsMatchList.length > 0 && (
+            <div>
+              <h3 className="mb-3 text-base font-bold text-yellow-400">Finals</h3>
+              <TVBracket
+                matches={finalsMatchList}
+                totalRounds={Math.max(...finalsMatchList.map((m) => m.round), 0)}
+              />
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Tournament complete state */}
       {tournament.status === "completed" && !champion && (
         <div className="absolute inset-0 flex items-center justify-center bg-zinc-950/90">
@@ -679,6 +728,131 @@ export default function TVPage({
           </p>
         </div>
       )}
+    </div>
+  );
+}
+
+// --- TV Bracket Components ---
+
+function TVBracket({
+  matches,
+  totalRounds,
+}: {
+  matches: Match[];
+  totalRounds: number;
+}) {
+  const rounds: Match[][] = [];
+  for (let r = 1; r <= totalRounds; r++) {
+    rounds.push(
+      matches
+        .filter((m) => m.round === r)
+        .sort((a, b) => a.position - b.position)
+    );
+  }
+
+  const roundLabel = (round: number) => {
+    const fromFinal = totalRounds - round;
+    if (fromFinal === 0) return "Final";
+    if (fromFinal === 1) return "Semis";
+    if (fromFinal === 2) return "Quarters";
+    return `R${round}`;
+  };
+
+  return (
+    <div className="overflow-x-auto pb-2">
+      <div className="flex gap-6" style={{ minWidth: totalRounds * 180 }}>
+        {rounds.map((roundMatches, ri) => {
+          const round = ri + 1;
+          const gap = round === 1 ? 8 : Math.pow(2, ri) * 20;
+          return (
+            <div key={round} className="flex flex-col">
+              <p className="mb-2 text-center text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
+                {roundLabel(round)}
+              </p>
+              <div
+                className="flex flex-1 flex-col justify-around"
+                style={{ gap }}
+              >
+                {roundMatches.map((match) => (
+                  <TVMatchCard key={match.id} match={match} />
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function TVMatchCard({ match }: { match: Match }) {
+  const isComplete = match.status === "completed";
+  const isBye = !match.homeTeamId || !match.awayTeamId;
+
+  if (isBye && !match.homeTeam && !match.awayTeam) return null;
+
+  return (
+    <div className="w-40 rounded-md border border-zinc-800 bg-zinc-900 text-xs">
+      <TVTeamSlot
+        name={match.homeTeam?.name ?? null}
+        isWinner={isComplete && match.winnerId === match.homeTeamId}
+        isLoser={
+          isComplete &&
+          match.winnerId !== null &&
+          match.winnerId !== match.homeTeamId &&
+          match.homeTeamId !== null
+        }
+        position="top"
+      />
+      <div className="border-t border-zinc-800" />
+      <TVTeamSlot
+        name={match.awayTeam?.name ?? null}
+        isWinner={isComplete && match.winnerId === match.awayTeamId}
+        isLoser={
+          isComplete &&
+          match.winnerId !== null &&
+          match.winnerId !== match.awayTeamId &&
+          match.awayTeamId !== null
+        }
+        position="bottom"
+      />
+    </div>
+  );
+}
+
+function TVTeamSlot({
+  name,
+  isWinner,
+  isLoser,
+  position,
+}: {
+  name: string | null;
+  isWinner: boolean;
+  isLoser: boolean;
+  position: "top" | "bottom";
+}) {
+  const rounded =
+    position === "top" ? "rounded-t-md" : "rounded-b-md";
+
+  if (!name) {
+    return (
+      <div className={`px-2.5 py-1.5 text-center text-zinc-600 ${rounded}`}>
+        -
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`px-2.5 py-1.5 font-medium ${rounded} ${
+        isWinner
+          ? "bg-emerald-500/15 text-emerald-400"
+          : isLoser
+            ? "text-zinc-600 line-through"
+            : "text-zinc-300"
+      }`}
+    >
+      {name}
     </div>
   );
 }
