@@ -777,10 +777,9 @@ export default function TVPage({
               </>
             )}
             <div className="relative flex h-full flex-col justify-between p-4">
-              {/* Top: Spotify + title + QR codes */}
+              {/* Top: Spotify now playing + QR codes */}
               <div className="flex items-start justify-between">
-                <div className="flex items-center gap-5">
-                  {/* Album art thumbnail */}
+                <div className="flex items-center gap-4">
                   {nowPlaying?.playing && nowPlaying.track?.albumArt && (
                     <img
                       src={nowPlaying.track.albumArt}
@@ -788,42 +787,22 @@ export default function TVPage({
                       className="h-16 w-16 shrink-0 rounded-lg object-cover shadow-2xl"
                     />
                   )}
-                  <div>
-                    {nowPlaying?.playing && nowPlaying.track && (
-                      <div className="mb-1 flex items-center gap-1.5">
+                  {nowPlaying?.playing && nowPlaying.track && (
+                    <div>
+                      <div className="flex items-center gap-1.5">
                         <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
                         <span className="text-[10px] font-semibold uppercase tracking-widest text-emerald-400">
-                          {nowPlaying.track.name}
-                        </span>
-                        <span className="text-[10px] text-white/50">—</span>
-                        <span className="text-[10px] text-white/50">
-                          {nowPlaying.track.artist}
+                          Now Playing
                         </span>
                       </div>
-                    )}
-                    <h1 className="text-3xl font-black tracking-tight">
-                      {tournament.name}
-                    </h1>
-                    <div className="mt-0.5 flex items-center gap-3">
-                      <p className="text-sm text-zinc-500">Beer Olympics</p>
-                      {/* Tabs */}
-                      <div className="flex gap-1 rounded-lg bg-zinc-900/80 p-1">
-                        {(["games", "rules", "brackets"] as const).map((tab) => (
-                          <button
-                            key={tab}
-                            onClick={() => setTvTab(tab)}
-                            className={`rounded-md px-3 py-1 text-xs font-semibold capitalize transition-colors ${
-                              tvTab === tab
-                                ? "bg-zinc-700 text-white"
-                                : "text-zinc-500 hover:text-zinc-300"
-                            }`}
-                          >
-                            {tab}
-                          </button>
-                        ))}
-                      </div>
+                      <p className="text-lg font-bold text-white">
+                        {nowPlaying.track.name}
+                      </p>
+                      <p className="text-xs text-white/60">
+                        {nowPlaying.track.artist}
+                      </p>
                     </div>
-                  </div>
+                  )}
                 </div>
                 <div className="flex items-center gap-3">
                   {tournament.spotifyJamUrl && (
@@ -847,12 +826,32 @@ export default function TVPage({
                 </div>
               </div>
 
-              {/* Bottom: Match progress */}
+              {/* Bottom: Tournament name, tabs, match progress */}
               <div>
-                <div className="mb-1.5 flex items-center justify-between">
-                  <p className="text-xs uppercase tracking-wide text-zinc-500">
-                    Matches Complete
-                  </p>
+                <div className="mb-2 flex items-end justify-between">
+                  <div>
+                    <h1 className="text-3xl font-black tracking-tight">
+                      {tournament.name}
+                    </h1>
+                    <div className="mt-0.5 flex items-center gap-3">
+                      <p className="text-sm text-zinc-400">Beer Olympics</p>
+                      <div className="flex gap-1 rounded-lg bg-zinc-900/80 p-1">
+                        {(["games", "rules", "brackets"] as const).map((tab) => (
+                          <button
+                            key={tab}
+                            onClick={() => setTvTab(tab)}
+                            className={`rounded-md px-3 py-1 text-xs font-semibold capitalize transition-colors ${
+                              tvTab === tab
+                                ? "bg-zinc-700 text-white"
+                                : "text-zinc-500 hover:text-zinc-300"
+                            }`}
+                          >
+                            {tab}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
                   <p className="text-lg font-bold tabular-nums">
                     {completedMatches.length}
                     <span className="text-zinc-600">/{realMatches.length}</span>
