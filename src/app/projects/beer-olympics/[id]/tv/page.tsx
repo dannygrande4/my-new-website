@@ -466,46 +466,7 @@ export default function TVPage({
   return (
     <>
     <div className="relative flex min-h-screen flex-col overflow-hidden bg-zinc-950 text-white">
-      {/* Now Playing — prominent album art header */}
-      {nowPlaying?.playing && nowPlaying.track && (
-        <div className="relative h-44 w-full overflow-hidden">
-          {nowPlaying.track.albumArt ? (
-            <>
-              <img
-                src={nowPlaying.track.albumArt}
-                alt=""
-                className="absolute inset-0 h-full w-full object-cover"
-              />
-              <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/50 to-zinc-950" />
-            </>
-          ) : (
-            <div className="absolute inset-0 bg-gradient-to-b from-emerald-950/60 to-zinc-950" />
-          )}
-          <div className="relative flex h-full items-center gap-4 px-8 py-2">
-            {nowPlaying.track.albumArt && (
-              <img
-                src={nowPlaying.track.albumArt}
-                alt=""
-                className="h-full shrink-0 self-stretch rounded-lg object-cover shadow-2xl"
-              />
-            )}
-            <div className="min-w-0 flex-1">
-              <div className="mb-0.5 flex items-center gap-1.5">
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
-                <span className="text-[10px] font-semibold uppercase tracking-widest text-emerald-400">
-                  Now Playing
-                </span>
-              </div>
-              <p className="truncate text-xl font-black text-white drop-shadow-lg">
-                {nowPlaying.track.name}
-              </p>
-              <p className="truncate text-xs font-medium text-white/70">
-                {nowPlaying.track.artist}
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Now Playing state stored for use in header */}
       {/* Win notification overlay */}
       {winEvent && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -802,74 +763,110 @@ export default function TVPage({
           {/* Full screen layout — 3 evenly spaced sections */}
           <div className="flex flex-1 flex-col justify-evenly gap-4 px-8 py-4">
 
-          {/* Section 1: Header */}
-          <div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-6">
-                <div>
-                  <h1 className="text-3xl font-black tracking-tight">
-                    {tournament.name}
-                  </h1>
-                  <p className="text-sm text-zinc-500">Beer Olympics</p>
+          {/* Section 1: Header (with album art background when playing) */}
+          <div className="relative overflow-hidden rounded-2xl">
+            {/* Album art background */}
+            {nowPlaying?.playing && nowPlaying.track?.albumArt && (
+              <>
+                <img
+                  src={nowPlaying.track.albumArt}
+                  alt=""
+                  className="absolute inset-0 h-full w-full object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/70 to-black/60" />
+              </>
+            )}
+            <div className="relative flex flex-col gap-3 p-4">
+              {/* Now playing + title row */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-5">
+                  {/* Album art thumbnail */}
+                  {nowPlaying?.playing && nowPlaying.track?.albumArt && (
+                    <img
+                      src={nowPlaying.track.albumArt}
+                      alt=""
+                      className="h-16 w-16 shrink-0 rounded-lg object-cover shadow-2xl"
+                    />
+                  )}
+                  <div>
+                    {nowPlaying?.playing && nowPlaying.track && (
+                      <div className="mb-1 flex items-center gap-1.5">
+                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
+                        <span className="text-[10px] font-semibold uppercase tracking-widest text-emerald-400">
+                          {nowPlaying.track.name}
+                        </span>
+                        <span className="text-[10px] text-white/50">—</span>
+                        <span className="text-[10px] text-white/50">
+                          {nowPlaying.track.artist}
+                        </span>
+                      </div>
+                    )}
+                    <h1 className="text-3xl font-black tracking-tight">
+                      {tournament.name}
+                    </h1>
+                    <div className="mt-0.5 flex items-center gap-3">
+                      <p className="text-sm text-zinc-500">Beer Olympics</p>
+                      {/* Tabs */}
+                      <div className="flex gap-1 rounded-lg bg-zinc-900/80 p-1">
+                        {(["games", "rules", "brackets"] as const).map((tab) => (
+                          <button
+                            key={tab}
+                            onClick={() => setTvTab(tab)}
+                            className={`rounded-md px-3 py-1 text-xs font-semibold capitalize transition-colors ${
+                              tvTab === tab
+                                ? "bg-zinc-700 text-white"
+                                : "text-zinc-500 hover:text-zinc-300"
+                            }`}
+                          >
+                            {tab}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                {/* Tabs */}
-                <div className="flex gap-1 rounded-lg bg-zinc-900 p-1">
-                  {(["games", "rules", "brackets"] as const).map((tab) => (
-                    <button
-                      key={tab}
-                      onClick={() => setTvTab(tab)}
-                      className={`rounded-md px-3 py-1 text-xs font-semibold capitalize transition-colors ${
-                        tvTab === tab
-                          ? "bg-zinc-700 text-white"
-                          : "text-zinc-500 hover:text-zinc-300"
-                      }`}
-                    >
-                      {tab}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="flex items-center gap-4">
-                {/* QR Codes */}
-                <div className="flex items-center gap-3">
-                  {tournament.spotifyJamUrl && (
+                <div className="flex items-center gap-4">
+                  {/* QR Codes */}
+                  <div className="flex items-center gap-3">
+                    {tournament.spotifyJamUrl && (
+                      <div className="flex flex-col items-center">
+                        <div className="rounded-md bg-white p-1.5">
+                          <QRCodeSVG value={tournament.spotifyJamUrl} size={56} />
+                        </div>
+                        <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-wider text-emerald-500">
+                          Spotify Jam
+                        </p>
+                      </div>
+                    )}
                     <div className="flex flex-col items-center">
                       <div className="rounded-md bg-white p-1.5">
-                        <QRCodeSVG value={tournament.spotifyJamUrl} size={56} />
+                        <QRCodeSVG value={tournamentUrl} size={56} />
                       </div>
-                      <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-wider text-emerald-500">
-                        Spotify Jam
+                      <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-wider text-zinc-500">
+                        Scorekeeper
                       </p>
                     </div>
-                  )}
-                  <div className="flex flex-col items-center">
-                    <div className="rounded-md bg-white p-1.5">
-                      <QRCodeSVG value={tournamentUrl} size={56} />
-                    </div>
-                    <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-wider text-zinc-500">
-                      Scorekeeper
+                  </div>
+                  <div className="text-right">
+                    <p className="text-2xl font-bold tabular-nums">
+                      {completedMatches.length}
+                      <span className="text-zinc-600">/{realMatches.length}</span>
+                    </p>
+                    <p className="text-xs uppercase tracking-wide text-zinc-500">
+                      Matches Complete
                     </p>
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-2xl font-bold tabular-nums">
-                    {completedMatches.length}
-                    <span className="text-zinc-600">/{realMatches.length}</span>
-                  </p>
-                  <p className="text-xs uppercase tracking-wide text-zinc-500">
-                    Matches Complete
-                  </p>
-                </div>
               </div>
-            </div>
-            {/* Progress bar */}
-            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-zinc-800">
-              <div
-                className="h-full rounded-full bg-emerald-500 transition-all duration-700"
-                style={{
-                  width: `${realMatches.length > 0 ? (completedMatches.length / realMatches.length) * 100 : 0}%`,
-                }}
-              />
+              {/* Progress bar */}
+              <div className="h-1.5 overflow-hidden rounded-full bg-zinc-800/80">
+                <div
+                  className="h-full rounded-full bg-emerald-500 transition-all duration-700"
+                  style={{
+                    width: `${realMatches.length > 0 ? (completedMatches.length / realMatches.length) * 100 : 0}%`,
+                  }}
+                />
+              </div>
             </div>
           </div>
 
