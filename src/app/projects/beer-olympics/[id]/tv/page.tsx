@@ -427,7 +427,7 @@ export default function TVPage({
     <div className="relative min-h-screen overflow-hidden bg-zinc-950 text-white">
       {/* Now Playing — prominent album art header */}
       {nowPlaying?.playing && nowPlaying.track && (
-        <div className="relative h-48 w-full overflow-hidden">
+        <div className="relative h-32 w-full overflow-hidden">
           {nowPlaying.track.albumArt ? (
             <>
               <img
@@ -440,25 +440,25 @@ export default function TVPage({
           ) : (
             <div className="absolute inset-0 bg-gradient-to-b from-emerald-950/60 to-zinc-950" />
           )}
-          <div className="relative flex h-full items-end px-12 pb-5">
+          <div className="relative flex h-full items-end px-8 pb-3">
             {nowPlaying.track.albumArt && (
               <img
                 src={nowPlaying.track.albumArt}
                 alt=""
-                className="mr-5 h-24 w-24 shrink-0 rounded-lg shadow-2xl"
+                className="mr-4 h-18 w-18 shrink-0 rounded-lg shadow-2xl"
               />
             )}
             <div className="min-w-0 flex-1">
-              <div className="mb-1 flex items-center gap-2">
-                <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
-                <span className="text-xs font-semibold uppercase tracking-widest text-emerald-400">
+              <div className="mb-0.5 flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
+                <span className="text-[10px] font-semibold uppercase tracking-widest text-emerald-400">
                   Now Playing
                 </span>
               </div>
-              <p className="truncate text-2xl font-black text-white drop-shadow-lg">
+              <p className="truncate text-xl font-black text-white drop-shadow-lg">
                 {nowPlaying.track.name}
               </p>
-              <p className="truncate text-sm font-medium text-white/70">
+              <p className="truncate text-xs font-medium text-white/70">
                 {nowPlaying.track.artist}
               </p>
             </div>
@@ -759,41 +759,41 @@ export default function TVPage({
         /* ===== REGULAR GAMES SCREEN ===== */
         <>
           {/* Header */}
-          <div className="flex items-center justify-between px-12 pt-10">
+          <div className="flex items-center justify-between px-8 pt-4">
             <div>
-              <h1 className="text-5xl font-black tracking-tight">
+              <h1 className="text-3xl font-black tracking-tight">
                 {tournament.name}
               </h1>
-              <p className="mt-1 text-xl text-zinc-500">Beer Olympics</p>
+              <p className="text-sm text-zinc-500">Beer Olympics</p>
             </div>
-            <div className="flex items-center gap-6">
+            <div className="flex items-center gap-4">
               {/* QR Codes */}
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
                 {tournament.spotifyJamUrl && (
                   <div className="flex flex-col items-center">
-                    <div className="rounded-lg bg-white p-2">
-                      <QRCodeSVG value={tournament.spotifyJamUrl} size={80} />
+                    <div className="rounded-md bg-white p-1.5">
+                      <QRCodeSVG value={tournament.spotifyJamUrl} size={56} />
                     </div>
-                    <p className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-500">
+                    <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-wider text-emerald-500">
                       Spotify Jam
                     </p>
                   </div>
                 )}
                 <div className="flex flex-col items-center">
-                  <div className="rounded-lg bg-white p-2">
-                    <QRCodeSVG value={tournamentUrl} size={80} />
+                  <div className="rounded-md bg-white p-1.5">
+                    <QRCodeSVG value={tournamentUrl} size={56} />
                   </div>
-                  <p className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                  <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-wider text-zinc-500">
                     Scorekeeper
                   </p>
                 </div>
               </div>
               <div className="text-right">
-                <p className="text-4xl font-bold tabular-nums">
+                <p className="text-2xl font-bold tabular-nums">
                   {completedMatches.length}
                   <span className="text-zinc-600">/{realMatches.length}</span>
                 </p>
-                <p className="text-sm uppercase tracking-wide text-zinc-500">
+                <p className="text-xs uppercase tracking-wide text-zinc-500">
                   Matches Complete
                 </p>
               </div>
@@ -801,7 +801,7 @@ export default function TVPage({
           </div>
 
           {/* Progress bar */}
-          <div className="mx-12 mt-6 h-2 overflow-hidden rounded-full bg-zinc-800">
+          <div className="mx-8 mt-3 h-1.5 overflow-hidden rounded-full bg-zinc-800">
             <div
               className="h-full rounded-full bg-emerald-500 transition-all duration-700"
               style={{
@@ -811,8 +811,8 @@ export default function TVPage({
           </div>
 
           {/* Game stations */}
-          <div className="mt-8 px-12 pb-12">
-            <div className={`grid gap-6 ${
+          <div className="mt-4 px-8">
+            <div className={`grid gap-3 ${
               gameStations.length <= 2
                 ? "grid-cols-2"
                 : gameStations.length <= 4
@@ -827,7 +827,7 @@ export default function TVPage({
                 return (
                   <div
                     key={station.gameId}
-                    className={`rounded-2xl border p-6 transition-all ${
+                    className={`rounded-xl border p-4 transition-all ${
                       isPlaying
                         ? "border-blue-500/40 bg-blue-500/5"
                         : isComplete
@@ -835,66 +835,56 @@ export default function TVPage({
                           : "border-zinc-800 bg-zinc-900/50"
                     }`}
                   >
-                    <div className="mb-4 flex items-center justify-between">
-                      <h3 className="text-lg font-bold">{station.gameName}</h3>
+                    <div className="mb-2 flex items-center justify-between">
+                      <h3 className="text-sm font-bold">{station.gameName}</h3>
                       {isPlaying && (
-                        <span className="rounded-full bg-blue-500/20 px-3 py-1 text-xs font-bold uppercase tracking-wide text-blue-400">
-                          Now Playing
+                        <span className="rounded-full bg-blue-500/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-blue-400">
+                          Playing
                         </span>
                       )}
                       {isComplete && (
-                        <span className="rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-bold uppercase tracking-wide text-emerald-400">
-                          Complete
+                        <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-400">
+                          Done
                         </span>
                       )}
                       {isWaiting && (
-                        <span className="rounded-full bg-zinc-700/50 px-3 py-1 text-xs font-bold uppercase tracking-wide text-zinc-400">
+                        <span className="rounded-full bg-zinc-700/50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-zinc-400">
                           Waiting
                         </span>
                       )}
                     </div>
 
                     {station.currentMatch && (
-                      <div className="flex flex-col items-center gap-2">
-                        <div className="w-full text-center">
-                          <p className={`text-2xl font-black ${isPlaying ? "text-white" : "text-zinc-300"}`}>
-                            {station.currentMatch.homeTeam?.name}
-                          </p>
-                          <p className="text-xs text-zinc-500">
-                            {station.currentMatch.homeTeam?.members.join(", ")}
-                          </p>
-                        </div>
-                        <span className="text-lg font-bold text-zinc-600">vs</span>
-                        <div className="w-full text-center">
-                          <p className={`text-2xl font-black ${isPlaying ? "text-white" : "text-zinc-300"}`}>
-                            {station.currentMatch.awayTeam?.name}
-                          </p>
-                          <p className="text-xs text-zinc-500">
-                            {station.currentMatch.awayTeam?.members.join(", ")}
-                          </p>
-                        </div>
+                      <div className="flex flex-col items-center gap-0.5">
+                        <p className={`text-lg font-black ${isPlaying ? "text-white" : "text-zinc-300"}`}>
+                          {station.currentMatch.homeTeam?.name}
+                        </p>
+                        <span className="text-xs font-bold text-zinc-600">vs</span>
+                        <p className={`text-lg font-black ${isPlaying ? "text-white" : "text-zinc-300"}`}>
+                          {station.currentMatch.awayTeam?.name}
+                        </p>
                       </div>
                     )}
 
                     {isComplete && station.winner && (
-                      <div className="mt-2 text-center">
-                        <p className="text-sm font-semibold uppercase tracking-wide text-emerald-500">
+                      <div className="mt-1 text-center">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-500">
                           Winner
                         </p>
-                        <p className="text-2xl font-black text-emerald-400">
+                        <p className="text-lg font-black text-emerald-400">
                           {station.winner.name}
                         </p>
                       </div>
                     )}
 
                     {isWaiting && !station.currentMatch && (
-                      <p className="text-center text-sm text-zinc-500">
-                        Waiting for teams to finish other games
+                      <p className="text-center text-xs text-zinc-500">
+                        Waiting for other games
                       </p>
                     )}
 
-                    <div className="mt-4 flex items-center gap-2">
-                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-800">
+                    <div className="mt-2 flex items-center gap-1.5">
+                      <div className="h-1 flex-1 overflow-hidden rounded-full bg-zinc-800">
                         <div
                           className={`h-full rounded-full transition-all duration-500 ${
                             isComplete ? "bg-emerald-500" : "bg-blue-500"
@@ -904,15 +894,15 @@ export default function TVPage({
                           }}
                         />
                       </div>
-                      <span className="text-xs tabular-nums text-zinc-500">
+                      <span className="text-[10px] tabular-nums text-zinc-500">
                         {station.completedMatches}/{station.totalMatches}
                       </span>
                     </div>
 
                     {station.onDeck && station.onDeck.id !== station.currentMatch?.id && (
-                      <div className="mt-3 rounded-lg border border-zinc-800 bg-zinc-900/80 px-3 py-2 text-center">
-                        <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">On Deck</p>
-                        <p className="text-xs font-medium text-zinc-400">
+                      <div className="mt-2 rounded-md border border-zinc-800 bg-zinc-900/80 px-2 py-1 text-center">
+                        <p className="text-[9px] font-semibold uppercase tracking-widest text-zinc-500">On Deck</p>
+                        <p className="text-[11px] font-medium text-zinc-400">
                           {station.onDeck.homeTeam?.name ?? "TBD"}{" "}
                           <span className="text-zinc-600">vs</span>{" "}
                           {station.onDeck.awayTeam?.name ?? "TBD"}
@@ -925,22 +915,22 @@ export default function TVPage({
             </div>
 
             {/* Standings */}
-            <div className="mt-8">
-              <h2 className="mb-4 text-sm font-bold uppercase tracking-widest text-zinc-500">
+            <div className="mt-4 pb-4">
+              <h2 className="mb-2 text-xs font-bold uppercase tracking-widest text-zinc-500">
                 Standings
               </h2>
-              <div className="flex gap-3 overflow-x-auto">
+              <div className="flex gap-2 overflow-x-auto">
                 {standings.map((team, i) => (
                   <div
                     key={team.id}
-                    className={`flex shrink-0 items-center gap-3 rounded-xl border px-5 py-3 ${
+                    className={`flex shrink-0 items-center gap-2 rounded-lg border px-3 py-2 ${
                       i === 0 && team.wins > 0
                         ? "border-yellow-500/30 bg-yellow-500/10"
                         : "border-zinc-800 bg-zinc-900"
                     }`}
                   >
                     <span
-                      className={`text-2xl font-black ${
+                      className={`text-lg font-black ${
                         i === 0 && team.wins > 0
                           ? "text-yellow-400"
                           : i === 1 && team.wins > 0
@@ -953,12 +943,9 @@ export default function TVPage({
                       {i + 1}
                     </span>
                     <div>
-                      <p className="font-bold">{team.name}</p>
-                      <p className="text-xs text-zinc-500">
-                        {team.members.join(", ")}
-                      </p>
+                      <p className="text-sm font-bold">{team.name}</p>
                     </div>
-                    <span className="ml-2 text-2xl font-black tabular-nums text-zinc-400">
+                    <span className="ml-1 text-lg font-black tabular-nums text-zinc-400">
                       {team.wins}
                     </span>
                   </div>
