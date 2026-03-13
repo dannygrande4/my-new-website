@@ -392,6 +392,8 @@ export default function ScorekeeperPage({
                 </p>
                 <a
                   href={`/api/spotify?tournamentId=${id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="mt-2 inline-block rounded-full bg-emerald-600 px-4 py-1.5 text-xs font-medium text-white transition-colors hover:bg-emerald-700"
                 >
                   Connect Spotify

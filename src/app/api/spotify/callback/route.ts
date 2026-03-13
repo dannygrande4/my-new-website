@@ -154,8 +154,27 @@ export async function GET(request: NextRequest) {
     },
   });
 
-  // Success — redirect back to scorekeeper
-  return NextResponse.redirect(
-    `${baseUrl}/projects/beer-olympics/${state}/scorekeeper`
+  // Success — show confirmation and auto-close the tab
+  return new NextResponse(
+    `<!DOCTYPE html>
+<html>
+<head><title>Spotify Connected</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { font-family: system-ui, sans-serif; background: #09090b; color: #fafafa; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 24px; }
+  .card { max-width: 420px; text-align: center; }
+  h1 { font-size: 1.5rem; color: #10b981; margin-bottom: 12px; }
+  p { color: #a1a1aa; line-height: 1.6; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>Spotify Connected!</h1>
+    <p>You can close this tab. The scorekeeper will update automatically.</p>
+  </div>
+  <script>window.close();</script>
+</body>
+</html>`,
+    { status: 200, headers: { "Content-Type": "text/html" } }
   );
 }
