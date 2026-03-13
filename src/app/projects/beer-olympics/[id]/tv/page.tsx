@@ -464,7 +464,7 @@ export default function TVPage({
 
   return (
     <>
-    <div className="relative min-h-screen overflow-hidden bg-zinc-950 text-white">
+    <div className="relative flex min-h-screen flex-col overflow-hidden bg-zinc-950 text-white">
       {/* Now Playing — prominent album art header */}
       {nowPlaying?.playing && nowPlaying.track && (
         <div className="relative h-32 w-full overflow-hidden">
@@ -798,8 +798,8 @@ export default function TVPage({
       ) : (
         /* ===== REGULAR GAMES SCREEN ===== */
         <>
-          {/* First fold — exactly one screen */}
-          <div className="flex h-screen flex-col">
+          {/* First fold — fills remaining viewport after spotify */}
+          <div className="flex flex-1 flex-col">
           {/* Header */}
           <div className="flex shrink-0 items-center justify-between px-8 pt-3">
             <div>
@@ -852,9 +852,9 @@ export default function TVPage({
             />
           </div>
 
-          {/* Game stations — stretches to fill available space */}
-          <div className="mt-3 flex min-h-0 flex-1 flex-col px-8 pb-2">
-            <div className={`grid flex-1 auto-rows-fr gap-3 ${
+          {/* Game stations */}
+          <div className="flex min-h-0 flex-1 flex-col justify-center px-8 pb-2">
+            <div className={`grid gap-3 ${
               gameStations.length <= 2
                 ? "grid-cols-2"
                 : gameStations.length <= 4
@@ -869,7 +869,7 @@ export default function TVPage({
                 return (
                   <div
                     key={station.gameId}
-                    className={`flex flex-col justify-between rounded-xl border p-3 transition-all ${
+                    className={`rounded-xl border p-3 transition-all ${
                       isPlaying
                         ? "border-blue-500/40 bg-blue-500/5"
                         : isComplete
@@ -877,84 +877,80 @@ export default function TVPage({
                           : "border-zinc-800 bg-zinc-900/50"
                     }`}
                   >
-                    <div>
-                      <div className="mb-1 flex items-center justify-between">
-                        <h3 className="text-sm font-bold">{station.gameName}</h3>
-                        {isPlaying && (
-                          <span className="rounded-full bg-blue-500/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-blue-400">
-                            Playing
-                          </span>
-                        )}
-                        {isComplete && (
-                          <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-400">
-                            Done
-                          </span>
-                        )}
-                        {isWaiting && (
-                          <span className="rounded-full bg-zinc-700/50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-zinc-400">
-                            Waiting
-                          </span>
-                        )}
-                      </div>
-
-                      {station.currentMatch && (
-                        <div className="flex flex-col items-center">
-                          <p className={`text-lg font-black ${isPlaying ? "text-white" : "text-zinc-300"}`}>
-                            {station.currentMatch.homeTeam?.name}
-                          </p>
-                          <span className="text-xs font-bold text-zinc-600">vs</span>
-                          <p className={`text-lg font-black ${isPlaying ? "text-white" : "text-zinc-300"}`}>
-                            {station.currentMatch.awayTeam?.name}
-                          </p>
-                        </div>
-                      )}
-
-                      {isComplete && station.winner && (
-                        <div className="mt-1 text-center">
-                          <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-500">
-                            Winner
-                          </p>
-                          <p className="text-lg font-black text-emerald-400">
-                            {station.winner.name}
-                          </p>
-                        </div>
-                      )}
-
-                      {isWaiting && !station.currentMatch && (
-                        <p className="text-center text-xs text-zinc-500">
-                          Waiting for other games
-                        </p>
-                      )}
-                    </div>
-
-                    <div>
-                      <div className="mt-1 flex items-center gap-1.5">
-                        <div className="h-1 flex-1 overflow-hidden rounded-full bg-zinc-800">
-                          <div
-                            className={`h-full rounded-full transition-all duration-500 ${
-                              isComplete ? "bg-emerald-500" : "bg-blue-500"
-                            }`}
-                            style={{
-                              width: `${station.totalMatches > 0 ? (station.completedMatches / station.totalMatches) * 100 : 0}%`,
-                            }}
-                          />
-                        </div>
-                        <span className="text-[10px] tabular-nums text-zinc-500">
-                          {station.completedMatches}/{station.totalMatches}
+                    <div className="mb-1 flex items-center justify-between">
+                      <h3 className="text-sm font-bold">{station.gameName}</h3>
+                      {isPlaying && (
+                        <span className="rounded-full bg-blue-500/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-blue-400">
+                          Playing
                         </span>
-                      </div>
-
-                      {station.onDeck && station.onDeck.id !== station.currentMatch?.id && (
-                        <div className="mt-1.5 rounded-md border border-zinc-800 bg-zinc-900/80 px-2 py-1 text-center">
-                          <p className="text-[9px] font-semibold uppercase tracking-widest text-zinc-500">On Deck</p>
-                          <p className="text-[11px] font-medium text-zinc-400">
-                            {station.onDeck.homeTeam?.name ?? "TBD"}{" "}
-                            <span className="text-zinc-600">vs</span>{" "}
-                            {station.onDeck.awayTeam?.name ?? "TBD"}
-                          </p>
-                        </div>
+                      )}
+                      {isComplete && (
+                        <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-400">
+                          Done
+                        </span>
+                      )}
+                      {isWaiting && (
+                        <span className="rounded-full bg-zinc-700/50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-zinc-400">
+                          Waiting
+                        </span>
                       )}
                     </div>
+
+                    {station.currentMatch && (
+                      <div className="flex flex-col items-center">
+                        <p className={`text-lg font-black ${isPlaying ? "text-white" : "text-zinc-300"}`}>
+                          {station.currentMatch.homeTeam?.name}
+                        </p>
+                        <span className="text-xs font-bold text-zinc-600">vs</span>
+                        <p className={`text-lg font-black ${isPlaying ? "text-white" : "text-zinc-300"}`}>
+                          {station.currentMatch.awayTeam?.name}
+                        </p>
+                      </div>
+                    )}
+
+                    {isComplete && station.winner && (
+                      <div className="mt-1 text-center">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-500">
+                          Winner
+                        </p>
+                        <p className="text-lg font-black text-emerald-400">
+                          {station.winner.name}
+                        </p>
+                      </div>
+                    )}
+
+                    {isWaiting && !station.currentMatch && (
+                      <p className="text-center text-xs text-zinc-500">
+                        Waiting for other games
+                      </p>
+                    )}
+
+                    <div className="mt-1 flex items-center gap-1.5">
+                      <div className="h-1 flex-1 overflow-hidden rounded-full bg-zinc-800">
+                        <div
+                          className={`h-full rounded-full transition-all duration-500 ${
+                            isComplete ? "bg-emerald-500" : "bg-blue-500"
+                          }`}
+                          style={{
+                            width: `${station.totalMatches > 0 ? (station.completedMatches / station.totalMatches) * 100 : 0}%`,
+                          }}
+                        />
+                      </div>
+                      <span className="text-[10px] tabular-nums text-zinc-500">
+                        {station.completedMatches}/{station.totalMatches}
+                      </span>
+                    </div>
+
+                    {station.onDeck && station.onDeck.id !== station.currentMatch?.id && (
+                      <div className="mt-1.5 rounded-md border border-zinc-800 bg-zinc-900/80 px-2 py-1 text-center">
+                        <p className="text-[9px] font-semibold uppercase tracking-widest text-zinc-500">On Deck</p>
+                        <p className="text-[11px] font-medium text-zinc-400">
+                          {station.onDeck.homeTeam?.name ?? "TBD"}{" "}
+                          <span className="text-zinc-600">vs</span>{" "}
+                          {station.onDeck.awayTeam?.name ?? "TBD"}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 );
               })}
