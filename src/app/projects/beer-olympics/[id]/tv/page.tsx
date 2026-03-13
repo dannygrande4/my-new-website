@@ -776,9 +776,9 @@ export default function TVPage({
                 <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/70 to-black/60" />
               </>
             )}
-            <div className="relative flex h-full flex-col justify-center gap-3 p-4">
-              {/* Now playing + title row */}
-              <div className="flex items-center justify-between">
+            <div className="relative flex h-full flex-col justify-between p-4">
+              {/* Top: Spotify + title + QR codes */}
+              <div className="flex items-start justify-between">
                 <div className="flex items-center gap-5">
                   {/* Album art thumbnail */}
                   {nowPlaying?.playing && nowPlaying.track?.albumArt && (
@@ -825,47 +825,47 @@ export default function TVPage({
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-4">
-                  {/* QR Codes */}
-                  <div className="flex items-center gap-3">
-                    {tournament.spotifyJamUrl && (
-                      <div className="flex flex-col items-center">
-                        <div className="rounded-md bg-white p-1.5">
-                          <QRCodeSVG value={tournament.spotifyJamUrl} size={56} />
-                        </div>
-                        <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-wider text-emerald-500">
-                          Spotify Jam
-                        </p>
-                      </div>
-                    )}
+                <div className="flex items-center gap-3">
+                  {tournament.spotifyJamUrl && (
                     <div className="flex flex-col items-center">
                       <div className="rounded-md bg-white p-1.5">
-                        <QRCodeSVG value={tournamentUrl} size={56} />
+                        <QRCodeSVG value={tournament.spotifyJamUrl} size={56} />
                       </div>
-                      <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-wider text-zinc-500">
-                        Scorekeeper
+                      <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-wider text-emerald-500">
+                        Spotify Jam
                       </p>
                     </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-2xl font-bold tabular-nums">
-                      {completedMatches.length}
-                      <span className="text-zinc-600">/{realMatches.length}</span>
-                    </p>
-                    <p className="text-xs uppercase tracking-wide text-zinc-500">
-                      Matches Complete
+                  )}
+                  <div className="flex flex-col items-center">
+                    <div className="rounded-md bg-white p-1.5">
+                      <QRCodeSVG value={tournamentUrl} size={56} />
+                    </div>
+                    <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-wider text-zinc-500">
+                      Scorekeeper
                     </p>
                   </div>
                 </div>
               </div>
-              {/* Progress bar */}
-              <div className="h-1.5 overflow-hidden rounded-full bg-zinc-800/80">
-                <div
-                  className="h-full rounded-full bg-emerald-500 transition-all duration-700"
-                  style={{
-                    width: `${realMatches.length > 0 ? (completedMatches.length / realMatches.length) * 100 : 0}%`,
-                  }}
-                />
+
+              {/* Bottom: Match progress */}
+              <div>
+                <div className="mb-1.5 flex items-center justify-between">
+                  <p className="text-xs uppercase tracking-wide text-zinc-500">
+                    Matches Complete
+                  </p>
+                  <p className="text-lg font-bold tabular-nums">
+                    {completedMatches.length}
+                    <span className="text-zinc-600">/{realMatches.length}</span>
+                  </p>
+                </div>
+                <div className="h-1.5 overflow-hidden rounded-full bg-zinc-800/80">
+                  <div
+                    className="h-full rounded-full bg-emerald-500 transition-all duration-700"
+                    style={{
+                      width: `${realMatches.length > 0 ? (completedMatches.length / realMatches.length) * 100 : 0}%`,
+                    }}
+                  />
+                </div>
               </div>
             </div>
           </div>
