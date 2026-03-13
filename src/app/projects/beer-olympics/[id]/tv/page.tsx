@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef, use, Suspense } from "react";
 import confetti from "canvas-confetti";
 import dynamic from "next/dynamic";
+import { QRCodeSVG } from "qrcode.react";
 
 const TrophyScene = dynamic(() => import("../bracket/Trophy"), { ssr: false });
 
@@ -15,6 +16,7 @@ interface Team {
 interface Game {
   id: string;
   name: string;
+  rules: string | null;
 }
 
 interface Match {
@@ -37,6 +39,7 @@ interface Tournament {
   id: string;
   name: string;
   status: string;
+  spotifyJamUrl: string | null;
   teams: Team[];
   games: { gameId: string; game: Game }[];
   matches: Match[];
@@ -53,7 +56,6 @@ interface WinEvent {
 
 function fireConfetti(isChampion: boolean) {
   if (isChampion) {
-    // Grand finale: long burst from both sides
     const duration = 4000;
     const end = Date.now() + duration;
     const colors = ["#fbbf24", "#f59e0b", "#d97706", "#ffffff"];
@@ -76,7 +78,6 @@ function fireConfetti(isChampion: boolean) {
       if (Date.now() < end) requestAnimationFrame(frame);
     })();
   } else {
-    // Regular win: burst from center
     confetti({
       particleCount: 120,
       spread: 80,
@@ -113,13 +114,11 @@ export default function TVPage({
     return null;
   }, [id]);
 
-  // Detect new wins by comparing match states
   const detectNewWins = useCallback(
     (data: Tournament) => {
       const prev = prevMatchStatesRef.current;
       const newWins: WinEvent[] = [];
 
-      // Find champion if finals are done
       const finalsMatches = data.matches.filter((m) => m.isFinals);
       const finalsTotalRounds =
         finalsMatches.length > 0
@@ -130,7 +129,6 @@ export default function TVPage({
       );
 
       for (const match of data.matches) {
-        // Only care about real matches (both teams present)
         if (!match.homeTeamId || !match.awayTeamId) continue;
 
         const prevStatus = prev.get(match.id);
@@ -158,7 +156,6 @@ export default function TVPage({
         }
       }
 
-      // Update stored states
       const newMap = new Map<string, string>();
       for (const match of data.matches) {
         newMap.set(match.id, match.status);
@@ -170,15 +167,11 @@ export default function TVPage({
     []
   );
 
-  // Show win only if there hasn't been one in the last 4 seconds (rapid clicking = skip)
-  // Champion wins always show regardless
   const showWin = useCallback((win: WinEvent) => {
     const now = Date.now();
     const timeSinceLast = now - lastWinTimeRef.current;
 
-    // If wins are coming in rapidly (< 4s apart) and it's not a champion, skip it
     if (!win.isChampion && timeSinceLast < 4000) {
-      // Clear any existing celebration immediately
       if (winTimeoutRef.current) {
         clearTimeout(winTimeoutRef.current);
         winTimeoutRef.current = null;
@@ -190,7 +183,6 @@ export default function TVPage({
 
     lastWinTimeRef.current = now;
 
-    // Clear any existing timeout
     if (winTimeoutRef.current) {
       clearTimeout(winTimeoutRef.current);
     }
@@ -204,12 +196,10 @@ export default function TVPage({
     }, win.isChampion ? 6000 : 3500);
   }, []);
 
-  // Initial load
   useEffect(() => {
     fetchTournament().then((data) => {
       setLoading(false);
       if (data) {
-        // Initialize state tracking without triggering events
         const map = new Map<string, string>();
         for (const match of data.matches) {
           map.set(match.id, match.status);
@@ -219,7 +209,6 @@ export default function TVPage({
     });
   }, [fetchTournament]);
 
-  // Poll every 2 seconds
   useEffect(() => {
     if (loading) return;
 
@@ -228,7 +217,6 @@ export default function TVPage({
       if (data) {
         const newWins = detectNewWins(data);
         if (newWins.length > 0) {
-          // Show only the last win (most recent), skip the rest
           showWin(newWins[newWins.length - 1]);
         }
       }
@@ -259,7 +247,6 @@ export default function TVPage({
   const completedMatches = realMatches.filter(
     (m) => m.status === "completed"
   );
-  // Team standings: count wins
   const winCounts = new Map<string, number>();
   for (const m of completedMatches) {
     if (m.winnerId) {
@@ -287,15 +274,12 @@ export default function TVPage({
       .filter((m) => m.status !== "completed")
       .sort((a, b) => a.round - b.round || a.position - b.position);
 
-    // Current match = first pending match with both teams assigned
     const currentMatch = pendingMatches.find(
       (m) => m.homeTeamId && m.awayTeamId
     ) ?? null;
 
-    // On deck = second pending match
     const onDeck = pendingMatches.length > 1 ? pendingMatches[1] : null;
 
-    // Game winner = winner of the final round match
     const maxRound = Math.max(...gameMatches.map((m) => m.round), 0);
     const finalMatch = gameMatches.find(
       (m) => m.round === maxRound && m.position === 0
@@ -335,10 +319,8 @@ export default function TVPage({
     .filter((m) => m.status !== "completed")
     .sort((a, b) => a.round - b.round || a.position - b.position);
 
-  const allGamesComplete = gameStations.every((s) => s.status === "complete");
-
   let finalsStation: {
-    status: "playing" | "complete" | "waiting";
+    status: "playing" | "complete";
     currentMatch: Match | null;
     totalMatches: number;
     completedMatches: number;
@@ -354,20 +336,6 @@ export default function TVPage({
       totalMatches: realFinalsMatches.length,
       completedMatches: completedFinalsMatches.length,
     };
-  } else if (allGamesComplete) {
-    finalsStation = {
-      status: "waiting",
-      currentMatch: null,
-      totalMatches: 0,
-      completedMatches: 0,
-    };
-  } else {
-    finalsStation = {
-      status: "waiting",
-      currentMatch: null,
-      totalMatches: 0,
-      completedMatches: 0,
-    };
   }
 
   // Find champion
@@ -381,6 +349,45 @@ export default function TVPage({
       champion = gf.winner;
     }
   }
+
+  // Find runner-up (loser of grand final)
+  let runnerUp: Team | null = null;
+  let thirdPlace: Team | null = null;
+  if (finalsMatchList.length > 0) {
+    const ftRounds = Math.max(...finalsMatchList.map((m) => m.round), 0);
+    const gf = finalsMatchList.find(
+      (m) => m.round === ftRounds && m.position === 0
+    );
+    if (gf?.status === "completed" && gf.winner) {
+      runnerUp = gf.winnerId === gf.homeTeamId ? gf.awayTeam : gf.homeTeam;
+
+      // Third place: losers of semifinals (round before final)
+      if (ftRounds >= 2) {
+        const semis = finalsMatchList.filter(
+          (m) => m.round === ftRounds - 1 && m.status === "completed"
+        );
+        // Third place goes to the semi-final loser with the most total wins
+        const semiLosers = semis
+          .map((m) => (m.winnerId === m.homeTeamId ? m.awayTeam : m.homeTeam))
+          .filter((t): t is Team => t !== null);
+        if (semiLosers.length > 0) {
+          thirdPlace = semiLosers.sort(
+            (a, b) => (winCounts.get(b.id) ?? 0) - (winCounts.get(a.id) ?? 0)
+          )[0];
+        }
+      }
+    }
+  }
+
+  const isTournamentComplete = tournament.status === "completed";
+  const tournamentUrl = typeof window !== "undefined"
+    ? `${window.location.origin}/projects/beer-olympics/${id}/scorekeeper`
+    : "";
+
+  // Collect unique games with rules for the rules section
+  const gamesWithRules = tournament.games
+    .map((tg) => tg.game)
+    .filter((g) => g.rules);
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-zinc-950 text-white">
@@ -420,7 +427,122 @@ export default function TVPage({
         </div>
       )}
 
-      {finalsMatchList.length > 0 ? (
+      {isTournamentComplete && champion ? (
+        /* ===== PODIUM SCREEN ===== */
+        <>
+          <div className="flex flex-col items-center px-12 pt-16">
+            <h1 className="text-5xl font-black tracking-tight text-yellow-400">
+              {tournament.name}
+            </h1>
+            <p className="mt-2 text-xl font-semibold uppercase tracking-widest text-yellow-500/60">
+              Final Results
+            </p>
+          </div>
+
+          {/* Podium */}
+          <div className="mx-auto mt-12 flex max-w-3xl items-end justify-center gap-6 px-12">
+            {/* 2nd Place */}
+            <div className="flex w-48 flex-col items-center">
+              <div className="mb-4 text-center">
+                <p className="text-lg font-black text-zinc-300">
+                  {runnerUp?.name ?? "—"}
+                </p>
+                {runnerUp && (
+                  <p className="text-xs text-zinc-500">
+                    {runnerUp.members.join(", ")}
+                  </p>
+                )}
+              </div>
+              <div className="flex w-full flex-col items-center rounded-t-xl bg-gradient-to-b from-zinc-300 to-zinc-400 pb-6 pt-8">
+                <span className="text-5xl font-black text-zinc-700">2</span>
+              </div>
+            </div>
+
+            {/* 1st Place */}
+            <div className="flex w-56 flex-col items-center">
+              <div className="mb-4 h-32 w-32">
+                <Suspense fallback={null}>
+                  <TrophyScene />
+                </Suspense>
+              </div>
+              <div className="mb-4 text-center">
+                <p className="text-2xl font-black text-yellow-400">
+                  {champion.name}
+                </p>
+                <p className="text-sm text-yellow-600">
+                  {champion.members.join(", ")}
+                </p>
+              </div>
+              <div className="flex w-full flex-col items-center rounded-t-xl bg-gradient-to-b from-yellow-400 to-yellow-500 pb-8 pt-10">
+                <span className="text-6xl font-black text-yellow-800">1</span>
+              </div>
+            </div>
+
+            {/* 3rd Place */}
+            <div className="flex w-44 flex-col items-center">
+              <div className="mb-4 text-center">
+                <p className="text-lg font-black text-amber-600">
+                  {thirdPlace?.name ?? "—"}
+                </p>
+                {thirdPlace && (
+                  <p className="text-xs text-zinc-500">
+                    {thirdPlace.members.join(", ")}
+                  </p>
+                )}
+              </div>
+              <div className="flex w-full flex-col items-center rounded-t-xl bg-gradient-to-b from-amber-600 to-amber-700 pb-4 pt-6">
+                <span className="text-4xl font-black text-amber-900">3</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Full Standings */}
+          <div className="mx-auto mt-12 max-w-3xl px-12 pb-12">
+            <h2 className="mb-4 text-sm font-bold uppercase tracking-widest text-zinc-500">
+              Final Standings
+            </h2>
+            <div className="flex gap-3 overflow-x-auto">
+              {standings.map((team, i) => (
+                <div
+                  key={team.id}
+                  className={`flex shrink-0 items-center gap-3 rounded-xl border px-5 py-3 ${
+                    i === 0 && team.wins > 0
+                      ? "border-yellow-500/30 bg-yellow-500/10"
+                      : i === 1
+                        ? "border-zinc-400/30 bg-zinc-400/10"
+                        : i === 2
+                          ? "border-amber-600/30 bg-amber-600/10"
+                          : "border-zinc-800 bg-zinc-900"
+                  }`}
+                >
+                  <span
+                    className={`text-2xl font-black ${
+                      i === 0 && team.wins > 0
+                        ? "text-yellow-400"
+                        : i === 1 && team.wins > 0
+                          ? "text-zinc-300"
+                          : i === 2 && team.wins > 0
+                            ? "text-amber-600"
+                            : "text-zinc-600"
+                    }`}
+                  >
+                    {i + 1}
+                  </span>
+                  <div>
+                    <p className="font-bold">{team.name}</p>
+                    <p className="text-xs text-zinc-500">
+                      {team.members.join(", ")}
+                    </p>
+                  </div>
+                  <span className="ml-2 text-2xl font-black tabular-nums text-zinc-400">
+                    {team.wins}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      ) : finalsMatchList.length > 0 ? (
         /* ===== FINALS SCREEN ===== */
         <>
           {/* Finals header */}
@@ -468,19 +590,7 @@ export default function TVPage({
               </Suspense>
             </div>
             <div className="text-center">
-              {champion ? (
-                <>
-                  <p className="text-2xl font-bold uppercase tracking-widest text-yellow-500">
-                    Champion
-                  </p>
-                  <p className="mt-2 text-7xl font-black text-yellow-400">
-                    {champion.name}
-                  </p>
-                  <p className="mt-3 text-xl text-yellow-600">
-                    {champion.members.join(", ")}
-                  </p>
-                </>
-              ) : finalsStation?.currentMatch ? (
+              {finalsStation?.currentMatch ? (
                 <>
                   <p className="text-sm font-semibold uppercase tracking-widest text-yellow-500/60">
                     Now Playing
@@ -582,14 +692,37 @@ export default function TVPage({
               </h1>
               <p className="mt-1 text-xl text-zinc-500">Beer Olympics</p>
             </div>
-            <div className="text-right">
-              <p className="text-4xl font-bold tabular-nums">
-                {completedMatches.length}
-                <span className="text-zinc-600">/{realMatches.length}</span>
-              </p>
-              <p className="text-sm uppercase tracking-wide text-zinc-500">
-                Matches Complete
-              </p>
+            <div className="flex items-center gap-6">
+              {/* QR Codes */}
+              <div className="flex items-center gap-4">
+                {tournament.spotifyJamUrl && (
+                  <div className="flex flex-col items-center">
+                    <div className="rounded-lg bg-white p-2">
+                      <QRCodeSVG value={tournament.spotifyJamUrl} size={80} />
+                    </div>
+                    <p className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-500">
+                      Spotify Jam
+                    </p>
+                  </div>
+                )}
+                <div className="flex flex-col items-center">
+                  <div className="rounded-lg bg-white p-2">
+                    <QRCodeSVG value={tournamentUrl} size={80} />
+                  </div>
+                  <p className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                    Scorekeeper
+                  </p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-4xl font-bold tabular-nums">
+                  {completedMatches.length}
+                  <span className="text-zinc-600">/{realMatches.length}</span>
+                </p>
+                <p className="text-sm uppercase tracking-wide text-zinc-500">
+                  Matches Complete
+                </p>
+              </div>
             </div>
           </div>
 
@@ -759,6 +892,28 @@ export default function TVPage({
               </div>
             </div>
           </div>
+
+          {/* Game Rules */}
+          {gamesWithRules.length > 0 && (
+            <div className="px-12 pb-8">
+              <h2 className="mb-4 text-sm font-bold uppercase tracking-widest text-zinc-500">
+                Game Rules
+              </h2>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {gamesWithRules.map((game) => (
+                  <div
+                    key={game.id}
+                    className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4"
+                  >
+                    <h3 className="text-sm font-bold text-zinc-300">{game.name}</h3>
+                    <p className="mt-2 whitespace-pre-wrap text-xs text-zinc-500">
+                      {game.rules}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Brackets */}
           <div className="mt-4 px-12 pb-12">

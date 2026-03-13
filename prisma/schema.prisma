@@ -8,14 +8,15 @@ datasource db {
 }
 
 model Tournament {
-  id        String   @id @default(cuid())
-  name      String
-  status    String   @default("setup") // setup, in_progress, completed
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            String   @id @default(cuid())
+  name          String
+  status        String   @default("setup") // setup, in_progress, completed
+  spotifyJamUrl String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  teams  Team[]
-  games  TournamentGame[]
+  teams   Team[]
+  games   TournamentGame[]
   matches Match[]
 }
 
@@ -32,8 +33,9 @@ model Team {
 }
 
 model Game {
-  id   String @id @default(cuid())
-  name String @unique // Beer Pong, Beer Die, Baseball, Honeycomb
+  id    String  @id @default(cuid())
+  name  String  @unique // Beer Pong, Beer Die, Baseball, Honeycomb
+  rules String?
 
   tournaments TournamentGame[]
   matches     Match[]

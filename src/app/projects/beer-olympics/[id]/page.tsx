@@ -150,7 +150,6 @@ export default function TournamentSetup({
       method: "POST",
     });
     if (res.ok) {
-      const data = await res.json();
       router.push(`/projects/beer-olympics/${id}/scorekeeper`);
     } else {
       const data = await res.json();

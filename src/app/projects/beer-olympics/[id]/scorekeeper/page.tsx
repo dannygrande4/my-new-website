@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState, useCallback, use } from "react";
 import { useRouter } from "next/navigation";
+import { QRCodeSVG } from "qrcode.react";
 
 interface Team {
   id: string;
@@ -13,6 +14,7 @@ interface Team {
 interface Game {
   id: string;
   name: string;
+  rules: string | null;
 }
 
 interface Match {
@@ -35,6 +37,7 @@ interface Tournament {
   id: string;
   name: string;
   status: string;
+  spotifyJamUrl: string | null;
   teams: Team[];
   games: { gameId: string; game: Game }[];
   matches: Match[];
@@ -61,14 +64,24 @@ export default function ScorekeeperPage({
   const [finalsReady, setFinalsReady] = useState(false);
   const [finalsGenerated, setFinalsGenerated] = useState(false);
   const [generatingFinals, setGeneratingFinals] = useState(false);
+  const [spotifyUrl, setSpotifyUrl] = useState("");
+  const [editingSpotify, setEditingSpotify] = useState(false);
+  const [showQR, setShowQR] = useState(false);
+  const [rulesGameId, setRulesGameId] = useState<string | null>(null);
+  const [editingRulesGameId, setEditingRulesGameId] = useState<string | null>(null);
+  const [editingRulesText, setEditingRulesText] = useState("");
 
   const fetchTournament = useCallback(async () => {
     const res = await fetch(`/api/tournaments/${id}`);
     if (res.ok) {
-      setTournament(await res.json());
+      const data = await res.json();
+      setTournament(data);
+      if (!editingSpotify) {
+        setSpotifyUrl(data.spotifyJamUrl || "");
+      }
     }
     setLoading(false);
-  }, [id]);
+  }, [id, editingSpotify]);
 
   const checkFinals = useCallback(async () => {
     const res = await fetch(`/api/tournaments/${id}/finals`);
@@ -104,6 +117,26 @@ export default function ScorekeeperPage({
     setGeneratingFinals(false);
   }
 
+  async function saveSpotifyUrl() {
+    await fetch(`/api/tournaments/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ spotifyJamUrl: spotifyUrl }),
+    });
+    setEditingSpotify(false);
+    fetchTournament();
+  }
+
+  async function saveGameRules(gameId: string) {
+    await fetch(`/api/games/${gameId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rules: editingRulesText }),
+    });
+    setEditingRulesGameId(null);
+    fetchTournament();
+  }
+
   async function restartTournament() {
     if (!confirm("Reset this tournament? All match results will be lost.")) return;
     await fetch(`/api/tournaments/${id}/reset`, { method: "POST" });
@@ -127,6 +160,9 @@ export default function ScorekeeperPage({
   }
 
   const totalRounds = Math.ceil(Math.log2(tournament.teams.length));
+  const tournamentUrl = typeof window !== "undefined"
+    ? `${window.location.origin}/projects/beer-olympics/${id}/tv`
+    : "";
 
   // Separate game matches from finals
   const gameMatchList = tournament.matches.filter((m) => !m.isFinals);
@@ -210,6 +246,10 @@ export default function ScorekeeperPage({
     (m) => m.status === "completed" && m.homeTeamId && m.awayTeamId
   ).length;
 
+  const rulesGame = rulesGameId
+    ? tournament.games.find((g) => g.gameId === rulesGameId)?.game
+    : null;
+
   return (
     <div className="min-h-screen px-6 py-16">
       <div className="mx-auto max-w-xl">
@@ -233,6 +273,159 @@ export default function ScorekeeperPage({
         <p className="mt-1 text-lg font-medium text-zinc-600 dark:text-zinc-300">
           {tournament.name}
         </p>
+
+        {/* QR Code + Spotify Section */}
+        <div className="mt-6 flex flex-col gap-3">
+          <button
+            onClick={() => setShowQR(!showQR)}
+            className="flex items-center gap-2 text-sm font-medium text-blue-600 dark:text-blue-400"
+          >
+            {showQR ? "Hide QR Codes" : "Show QR Codes"}
+          </button>
+
+          {showQR && (
+            <div className="flex flex-wrap gap-4">
+              {/* Tournament QR */}
+              <div className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
+                <p className="mb-2 text-center text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                  TV View
+                </p>
+                <QRCodeSVG value={tournamentUrl} size={120} />
+              </div>
+
+              {/* Spotify QR */}
+              {tournament.spotifyJamUrl && (
+                <div className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
+                  <p className="mb-2 text-center text-xs font-semibold uppercase tracking-wide text-emerald-600 dark:text-emerald-400">
+                    Spotify Jam
+                  </p>
+                  <QRCodeSVG value={tournament.spotifyJamUrl} size={120} />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Spotify Jam URL */}
+          <div className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                Spotify Jam Link
+              </p>
+              {!editingSpotify && (
+                <button
+                  onClick={() => setEditingSpotify(true)}
+                  className="text-xs text-blue-500"
+                >
+                  {tournament.spotifyJamUrl ? "Edit" : "Add"}
+                </button>
+              )}
+            </div>
+            {editingSpotify ? (
+              <div className="mt-2 flex gap-2">
+                <input
+                  type="url"
+                  placeholder="https://spotify.link/..."
+                  value={spotifyUrl}
+                  onChange={(e) => setSpotifyUrl(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && saveSpotifyUrl()}
+                  className="flex-1 rounded-md border border-zinc-300 bg-transparent px-3 py-1.5 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700"
+                />
+                <button
+                  onClick={saveSpotifyUrl}
+                  className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white"
+                >
+                  Save
+                </button>
+                <button
+                  onClick={() => {
+                    setEditingSpotify(false);
+                    setSpotifyUrl(tournament.spotifyJamUrl || "");
+                  }}
+                  className="text-xs text-zinc-400"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : tournament.spotifyJamUrl ? (
+              <p className="mt-1 truncate text-sm text-emerald-600 dark:text-emerald-400">
+                {tournament.spotifyJamUrl}
+              </p>
+            ) : (
+              <p className="mt-1 text-sm text-zinc-400">Not set</p>
+            )}
+          </div>
+        </div>
+
+        {/* Game Rules */}
+        <div className="mt-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+            Game Rules
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {tournament.games.map((tg) => (
+              <button
+                key={tg.gameId}
+                onClick={() => setRulesGameId(rulesGameId === tg.gameId ? null : tg.gameId)}
+                className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                  rulesGameId === tg.gameId
+                    ? "border-blue-500 bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400"
+                    : "border-zinc-200 text-zinc-500 hover:border-zinc-400 dark:border-zinc-700"
+                }`}
+              >
+                {tg.game.name}
+              </button>
+            ))}
+          </div>
+          {rulesGame && (
+            <div className="mt-3 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold">{rulesGame.name} Rules</h3>
+                {editingRulesGameId !== rulesGame.id && (
+                  <button
+                    onClick={() => {
+                      setEditingRulesGameId(rulesGame.id);
+                      setEditingRulesText(rulesGame.rules || "");
+                    }}
+                    className="text-xs text-blue-500"
+                  >
+                    {rulesGame.rules ? "Edit" : "Add Rules"}
+                  </button>
+                )}
+              </div>
+              {editingRulesGameId === rulesGame.id ? (
+                <div className="mt-2">
+                  <textarea
+                    value={editingRulesText}
+                    onChange={(e) => setEditingRulesText(e.target.value)}
+                    placeholder="Enter the rules for this game..."
+                    rows={4}
+                    className="w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700"
+                  />
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      onClick={() => saveGameRules(rulesGame.id)}
+                      className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white"
+                    >
+                      Save
+                    </button>
+                    <button
+                      onClick={() => setEditingRulesGameId(null)}
+                      className="text-xs text-zinc-400"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : rulesGame.rules ? (
+                <p className="mt-2 whitespace-pre-wrap text-sm text-zinc-600 dark:text-zinc-400">
+                  {rulesGame.rules}
+                </p>
+              ) : (
+                <p className="mt-2 text-sm italic text-zinc-400">No rules added yet.</p>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Progress */}
         <div className="mt-6">
@@ -324,7 +517,8 @@ export default function ScorekeeperPage({
                             isLoser={
                               isComplete && match.winnerId !== match.homeTeamId
                             }
-                            canSelect={!!isPlayable && !isSubmitting}
+                            canSelect={!isSubmitting && !!(match.homeTeamId && match.awayTeamId)}
+                            isChangeWinner={isComplete && match.winnerId !== match.homeTeamId}
                             onSelect={() =>
                               selectWinner(match.id, match.homeTeamId!)
                             }
@@ -337,7 +531,8 @@ export default function ScorekeeperPage({
                             isLoser={
                               isComplete && match.winnerId !== match.awayTeamId
                             }
-                            canSelect={!!isPlayable && !isSubmitting}
+                            canSelect={!isSubmitting && !!(match.homeTeamId && match.awayTeamId)}
+                            isChangeWinner={isComplete && match.winnerId !== match.awayTeamId}
                             onSelect={() =>
                               selectWinner(match.id, match.awayTeamId!)
                             }
@@ -380,12 +575,14 @@ function TeamRow({
   isWinner,
   isLoser,
   canSelect,
+  isChangeWinner,
   onSelect,
 }: {
   team: Team | null;
   isWinner: boolean;
   isLoser: boolean;
   canSelect: boolean;
+  isChangeWinner: boolean;
   onSelect: () => void;
 }) {
   if (!team) {
@@ -394,10 +591,12 @@ function TeamRow({
     );
   }
 
+  const isPlayable = canSelect && !isWinner;
+
   return (
     <button
-      onClick={canSelect ? onSelect : undefined}
-      disabled={!canSelect}
+      onClick={isPlayable ? onSelect : undefined}
+      disabled={!isPlayable}
       className={`flex w-full items-center justify-between px-4 py-3 text-left transition-colors ${
         isWinner
           ? "bg-emerald-50 dark:bg-emerald-900/20"
@@ -427,7 +626,12 @@ function TeamRow({
       {isWinner && (
         <span className="text-lg">W</span>
       )}
-      {canSelect && (
+      {isChangeWinner && canSelect && (
+        <span className="text-xs font-medium text-orange-500 dark:text-orange-400">
+          Change winner
+        </span>
+      )}
+      {!isWinner && !isLoser && canSelect && (
         <span className="text-xs font-medium text-blue-500 dark:text-blue-400">
           Tap to win
         </span>
