@@ -41,7 +41,7 @@ interface Tournament {
   status: string;
   spotifyJamUrl: string | null;
   teams: Team[];
-  games: { gameId: string; game: Game }[];
+  games: { gameId: string; customRules: string | null; game: Game }[];
   matches: Match[];
 }
 
@@ -413,9 +413,13 @@ export default function TVPage({
     ? `${window.location.origin}/projects/beer-olympics/${id}/scorekeeper`
     : "";
 
-  // Collect unique games with rules for the rules section
+  // Collect games with rules (customRules override default)
   const gamesWithRules = tournament.games
-    .map((tg) => tg.game)
+    .map((tg) => ({
+      id: tg.game.id,
+      name: tg.game.name,
+      rules: tg.customRules ?? tg.game.rules,
+    }))
     .filter((g) => g.rules);
 
   return (

@@ -41,7 +41,7 @@ interface Tournament {
   spotifyAccessToken: string | null;
   spotifyRefreshToken: string | null;
   teams: Team[];
-  games: { gameId: string; game: Game }[];
+  games: { gameId: string; customRules: string | null; game: Game }[];
   matches: Match[];
 }
 
@@ -70,8 +70,6 @@ export default function ScorekeeperPage({
   const [editingSpotify, setEditingSpotify] = useState(false);
   const [showQR, setShowQR] = useState(false);
   const [rulesGameId, setRulesGameId] = useState<string | null>(null);
-  const [editingRulesGameId, setEditingRulesGameId] = useState<string | null>(null);
-  const [editingRulesText, setEditingRulesText] = useState("");
 
   const fetchTournament = useCallback(async () => {
     const res = await fetch(`/api/tournaments/${id}`);
@@ -135,16 +133,6 @@ export default function ScorekeeperPage({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ tournamentId: id }),
     });
-    fetchTournament();
-  }
-
-  async function saveGameRules(gameId: string) {
-    await fetch(`/api/games/${gameId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rules: editingRulesText }),
-    });
-    setEditingRulesGameId(null);
     fetchTournament();
   }
 
@@ -257,9 +245,11 @@ export default function ScorekeeperPage({
     (m) => m.status === "completed" && m.homeTeamId && m.awayTeamId
   ).length;
 
-  const rulesGame = rulesGameId
-    ? tournament.games.find((g) => g.gameId === rulesGameId)?.game
+  const rulesTg = rulesGameId
+    ? tournament.games.find((g) => g.gameId === rulesGameId)
     : null;
+  const rulesGame = rulesTg?.game ?? null;
+  const activeRules = rulesTg?.customRules ?? rulesGame?.rules ?? null;
 
   return (
     <div className="min-h-screen px-6 py-16">
@@ -425,50 +415,13 @@ export default function ScorekeeperPage({
           </div>
           {rulesGame && (
             <div className="mt-3 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold">{rulesGame.name} Rules</h3>
-                {editingRulesGameId !== rulesGame.id && (
-                  <button
-                    onClick={() => {
-                      setEditingRulesGameId(rulesGame.id);
-                      setEditingRulesText(rulesGame.rules || "");
-                    }}
-                    className="text-xs text-blue-500"
-                  >
-                    {rulesGame.rules ? "Edit" : "Add Rules"}
-                  </button>
-                )}
-              </div>
-              {editingRulesGameId === rulesGame.id ? (
-                <div className="mt-2">
-                  <textarea
-                    value={editingRulesText}
-                    onChange={(e) => setEditingRulesText(e.target.value)}
-                    placeholder="Enter the rules for this game..."
-                    rows={4}
-                    className="w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700"
-                  />
-                  <div className="mt-2 flex gap-2">
-                    <button
-                      onClick={() => saveGameRules(rulesGame.id)}
-                      className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white"
-                    >
-                      Save
-                    </button>
-                    <button
-                      onClick={() => setEditingRulesGameId(null)}
-                      className="text-xs text-zinc-400"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              ) : rulesGame.rules ? (
+              <h3 className="text-sm font-semibold">{rulesGame.name} Rules</h3>
+              {activeRules ? (
                 <p className="mt-2 whitespace-pre-wrap text-sm text-zinc-600 dark:text-zinc-400">
-                  {rulesGame.rules}
+                  {activeRules}
                 </p>
               ) : (
-                <p className="mt-2 text-sm italic text-zinc-400">No rules added yet.</p>
+                <p className="mt-2 text-sm italic text-zinc-400">No rules set for this game.</p>
               )}
             </div>
           )}

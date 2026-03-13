@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 interface Game {
   id: string;
   name: string;
+  rules: string | null;
 }
 
 interface Team {
@@ -15,12 +16,18 @@ interface Team {
   members: string[];
 }
 
+interface TournamentGame {
+  gameId: string;
+  customRules: string | null;
+  game: Game;
+}
+
 interface Tournament {
   id: string;
   name: string;
   status: string;
   teams: Team[];
-  games: { gameId: string; game: Game }[];
+  games: TournamentGame[];
 }
 
 export default function TournamentSetup({
@@ -40,6 +47,10 @@ export default function TournamentSetup({
   const [creatingGame, setCreatingGame] = useState(false);
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
+  const [rulesGameId, setRulesGameId] = useState<string | null>(null);
+  const [editingRules, setEditingRules] = useState<string | null>(null);
+  const [editingRulesText, setEditingRulesText] = useState("");
+  const [savingRules, setSavingRules] = useState(false);
 
   useEffect(() => {
     fetchTournament();
@@ -51,8 +62,7 @@ export default function TournamentSetup({
     if (res.ok) {
       const data = await res.json();
       setTournament(data);
-      setSelectedGameIds(data.games.map((g: { gameId: string }) => g.gameId));
-      // Redirect to scorekeeper if already started
+      setSelectedGameIds(data.games.map((g: TournamentGame) => g.gameId));
       if (data.status === "in_progress" || data.status === "completed") {
         router.replace(`/projects/beer-olympics/${id}/scorekeeper`);
       }
@@ -80,7 +90,6 @@ export default function TournamentSetup({
       const game = await res.json();
       setNewGameName("");
       await fetchGames();
-      // Auto-select the newly created game
       const updated = [...selectedGameIds, game.id];
       setSelectedGameIds(updated);
       await fetch(`/api/tournaments/${id}/games`, {
@@ -102,12 +111,30 @@ export default function TournamentSetup({
       : [...selectedGameIds, gameId];
     setSelectedGameIds(updated);
 
+    // Close rules panel if deselecting the game being viewed
+    if (!updated.includes(gameId) && rulesGameId === gameId) {
+      setRulesGameId(null);
+      setEditingRules(null);
+    }
+
     await fetch(`/api/tournaments/${id}/games`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ gameIds: updated }),
     });
     fetchTournament();
+  }
+
+  async function saveCustomRules(gameId: string) {
+    setSavingRules(true);
+    await fetch(`/api/tournaments/${id}/games`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ gameId, customRules: editingRulesText }),
+    });
+    setEditingRules(null);
+    await fetchTournament();
+    setSavingRules(false);
   }
 
   function addMember() {
@@ -176,6 +203,13 @@ export default function TournamentSetup({
 
   const canStart = selectedGameIds.length > 0 && tournament.teams.length >= 2;
 
+  // Get the selected game's tournament-specific data for rules display
+  const selectedTournamentGame = rulesGameId
+    ? tournament.games.find((g) => g.gameId === rulesGameId)
+    : null;
+  const selectedGame = selectedTournamentGame?.game ?? null;
+  const activeRules = selectedTournamentGame?.customRules ?? selectedGame?.rules ?? null;
+
   return (
     <div className="min-h-screen px-6 py-16">
       <div className="mx-auto max-w-2xl">
@@ -231,6 +265,121 @@ export default function TournamentSetup({
             </button>
           </div>
         </section>
+
+        {/* Game Rules */}
+        {selectedGameIds.length > 0 && (
+          <section className="mt-6">
+            <h2 className="text-lg font-semibold">Game Rules</h2>
+            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+              Tap a game to view or customize its rules.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {tournament.games.map((tg) => {
+                const hasCustom = !!tg.customRules;
+                const hasDefault = !!tg.game.rules;
+                return (
+                  <button
+                    key={tg.gameId}
+                    onClick={() => {
+                      setRulesGameId(rulesGameId === tg.gameId ? null : tg.gameId);
+                      setEditingRules(null);
+                    }}
+                    className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                      rulesGameId === tg.gameId
+                        ? "border-blue-500 bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400"
+                        : "border-zinc-200 text-zinc-500 hover:border-zinc-400 dark:border-zinc-700"
+                    }`}
+                  >
+                    {tg.game.name}
+                    {hasCustom && (
+                      <span className="ml-1 text-emerald-500">*</span>
+                    )}
+                    {!hasCustom && !hasDefault && (
+                      <span className="ml-1 text-zinc-400">+</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {selectedGame && (
+              <div className="mt-3 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold">{selectedGame.name}</h3>
+                  {editingRules !== selectedGame.id ? (
+                    <button
+                      onClick={() => {
+                        setEditingRules(selectedGame.id);
+                        setEditingRulesText(selectedTournamentGame?.customRules ?? "");
+                      }}
+                      className="text-xs text-blue-500"
+                    >
+                      {selectedTournamentGame?.customRules ? "Edit Custom Rules" : "Customize Rules"}
+                    </button>
+                  ) : null}
+                </div>
+
+                {editingRules === selectedGame.id ? (
+                  <div className="mt-2">
+                    <textarea
+                      value={editingRulesText}
+                      onChange={(e) => setEditingRulesText(e.target.value)}
+                      placeholder={selectedGame.rules || "Enter rules for this game..."}
+                      rows={5}
+                      className="w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700"
+                    />
+                    {selectedGame.rules && (
+                      <p className="mt-1 text-xs text-zinc-400">
+                        Leave empty to use the default rules.
+                      </p>
+                    )}
+                    <div className="mt-2 flex gap-2">
+                      <button
+                        onClick={() => saveCustomRules(selectedGame.id)}
+                        disabled={savingRules}
+                        className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+                      >
+                        {savingRules ? "Saving..." : "Save"}
+                      </button>
+                      <button
+                        onClick={() => setEditingRules(null)}
+                        className="text-xs text-zinc-400"
+                      >
+                        Cancel
+                      </button>
+                      {selectedTournamentGame?.customRules && (
+                        <button
+                          onClick={() => {
+                            setEditingRulesText("");
+                            saveCustomRules(selectedGame.id);
+                          }}
+                          className="text-xs text-red-500"
+                        >
+                          Reset to Default
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ) : activeRules ? (
+                  <div className="mt-2">
+                    {selectedTournamentGame?.customRules && selectedGame.rules && (
+                      <p className="mb-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                        Custom rules (overriding default)
+                      </p>
+                    )}
+                    <p className="whitespace-pre-wrap text-sm text-zinc-600 dark:text-zinc-400">
+                      {activeRules}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="mt-2 text-sm italic text-zinc-400">
+                    No rules set. Tap &ldquo;Customize Rules&rdquo; to add rules for this tournament.
+                  </p>
+                )}
+              </div>
+            )}
+          </section>
+        )}
 
         {/* Add Team */}
         <section className="mt-10">

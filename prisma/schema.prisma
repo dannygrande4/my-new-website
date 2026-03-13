@@ -47,6 +47,7 @@ model Game {
 model TournamentGame {
   tournamentId String
   gameId       String
+  customRules  String?
 
   tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
   game       Game       @relation(fields: [gameId], references: [id], onDelete: Cascade)
