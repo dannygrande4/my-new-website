@@ -1,7 +1,10 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef, use } from "react";
+import { useEffect, useState, useCallback, useRef, use, Suspense } from "react";
 import confetti from "canvas-confetti";
+import dynamic from "next/dynamic";
+
+const TrophyScene = dynamic(() => import("../bracket/Trophy"), { ssr: false });
 
 interface Team {
   id: string;
@@ -446,18 +449,45 @@ export default function TVPage({
         />
       </div>
 
-      {/* Champion banner */}
-      {champion && (
-        <div className="mx-12 mt-8 rounded-2xl border border-yellow-500/30 bg-yellow-500/10 px-8 py-6 text-center">
-          <p className="text-lg font-semibold uppercase tracking-widest text-yellow-500">
-            Champion
-          </p>
-          <p className="mt-1 text-5xl font-black text-yellow-400">
-            {champion.name}
-          </p>
-          <p className="mt-2 text-lg text-yellow-600">
-            {champion.members.join(", ")}
-          </p>
+      {/* Finals active banner with trophy */}
+      {finalsMatchList.length > 0 && (
+        <div className="mx-12 mt-8 rounded-2xl border border-yellow-500/30 bg-yellow-500/5 px-8 py-6">
+          <div className="flex items-center justify-center gap-8">
+            <div className="h-40 w-40 shrink-0">
+              <Suspense fallback={null}>
+                <TrophyScene />
+              </Suspense>
+            </div>
+            <div className="text-center">
+              {champion ? (
+                <>
+                  <p className="text-lg font-semibold uppercase tracking-widest text-yellow-500">
+                    Champion
+                  </p>
+                  <p className="mt-1 text-5xl font-black text-yellow-400">
+                    {champion.name}
+                  </p>
+                  <p className="mt-2 text-lg text-yellow-600">
+                    {champion.members.join(", ")}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-lg font-semibold uppercase tracking-widest text-yellow-500">
+                    Finals Underway
+                  </p>
+                  <p className="mt-1 text-2xl font-bold text-yellow-400/80">
+                    Who will take the crown?
+                  </p>
+                </>
+              )}
+            </div>
+            <div className="h-40 w-40 shrink-0">
+              <Suspense fallback={null}>
+                <TrophyScene />
+              </Suspense>
+            </div>
+          </div>
         </div>
       )}
 

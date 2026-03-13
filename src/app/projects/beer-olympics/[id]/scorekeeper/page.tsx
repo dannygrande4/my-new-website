@@ -58,6 +58,9 @@ export default function ScorekeeperPage({
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState<string | null>(null);
+  const [finalsReady, setFinalsReady] = useState(false);
+  const [finalsGenerated, setFinalsGenerated] = useState(false);
+  const [generatingFinals, setGeneratingFinals] = useState(false);
 
   const fetchTournament = useCallback(async () => {
     const res = await fetch(`/api/tournaments/${id}`);
@@ -67,9 +70,19 @@ export default function ScorekeeperPage({
     setLoading(false);
   }, [id]);
 
+  const checkFinals = useCallback(async () => {
+    const res = await fetch(`/api/tournaments/${id}/finals`);
+    if (res.ok) {
+      const data = await res.json();
+      setFinalsReady(data.allGamesComplete);
+      setFinalsGenerated(data.finalsGenerated);
+    }
+  }, [id]);
+
   useEffect(() => {
     fetchTournament();
-  }, [fetchTournament]);
+    checkFinals();
+  }, [fetchTournament, checkFinals]);
 
   async function selectWinner(matchId: string, winnerId: string) {
     setSubmitting(matchId);
@@ -79,7 +92,16 @@ export default function ScorekeeperPage({
       body: JSON.stringify({ winnerId }),
     });
     await fetchTournament();
+    await checkFinals();
     setSubmitting(null);
+  }
+
+  async function generateFinals() {
+    setGeneratingFinals(true);
+    await fetch(`/api/tournaments/${id}/finals`, { method: "POST" });
+    await fetchTournament();
+    await checkFinals();
+    setGeneratingFinals(false);
   }
 
   async function restartTournament() {
@@ -329,6 +351,17 @@ export default function ScorekeeperPage({
             );
           })}
         </div>
+
+        {/* Generate Finals button */}
+        {finalsReady && !finalsGenerated && (
+          <button
+            onClick={generateFinals}
+            disabled={generatingFinals}
+            className="mt-8 w-full rounded-full bg-yellow-500 py-3 text-sm font-bold text-white transition-colors hover:bg-yellow-600 disabled:opacity-50"
+          >
+            {generatingFinals ? "Generating..." : "All Games Complete — Generate Finals Bracket"}
+          </button>
+        )}
 
         {/* Restart button (testing) */}
         <button
