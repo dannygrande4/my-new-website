@@ -63,9 +63,6 @@ export default function TournamentSetup({
       const data = await res.json();
       setTournament(data);
       setSelectedGameIds(data.games.map((g: TournamentGame) => g.gameId));
-      if (data.status === "in_progress" || data.status === "completed") {
-        router.replace(`/projects/beer-olympics/${id}/scorekeeper`);
-      }
     }
     setLoading(false);
   }
@@ -177,7 +174,7 @@ export default function TournamentSetup({
       method: "POST",
     });
     if (res.ok) {
-      router.push(`/projects/beer-olympics/${id}/scorekeeper`);
+      fetchTournament();
     } else {
       const data = await res.json();
       alert(data.error || "Failed to start tournament");
@@ -197,6 +194,40 @@ export default function TournamentSetup({
     return (
       <div className="flex min-h-screen items-center justify-center">
         <p className="text-zinc-400">Tournament not found.</p>
+      </div>
+    );
+  }
+
+  // If tournament is already started, show selection screen
+  if (tournament.status === "in_progress" || tournament.status === "completed") {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center px-6">
+        <h1 className="text-4xl font-black tracking-tight">{tournament.name}</h1>
+        <p className="mt-2 text-zinc-500 dark:text-zinc-400">Beer Olympics</p>
+        <div className="mt-10 flex flex-col gap-4 sm:flex-row">
+          <Link
+            href={`/projects/beer-olympics/${id}/tv`}
+            className="flex flex-col items-center gap-3 rounded-2xl border border-zinc-200 px-10 py-8 transition-all hover:border-blue-400 hover:bg-blue-50 dark:border-zinc-800 dark:hover:border-blue-500 dark:hover:bg-blue-900/20"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-blue-500"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>
+            <span className="text-lg font-bold">Display</span>
+            <span className="text-xs text-zinc-500">Show on TV or projector</span>
+          </Link>
+          <Link
+            href={`/projects/beer-olympics/${id}/scorekeeper`}
+            className="flex flex-col items-center gap-3 rounded-2xl border border-zinc-200 px-10 py-8 transition-all hover:border-emerald-400 hover:bg-emerald-50 dark:border-zinc-800 dark:hover:border-emerald-500 dark:hover:bg-emerald-900/20"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-emerald-500"><path d="M12 20h9"/><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.855z"/></svg>
+            <span className="text-lg font-bold">Scorekeeper</span>
+            <span className="text-xs text-zinc-500">Manage matches & scores</span>
+          </Link>
+        </div>
+        <Link
+          href="/projects/beer-olympics"
+          className="mt-8 text-sm text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+        >
+          &larr; Back to Tournaments
+        </Link>
       </div>
     );
   }

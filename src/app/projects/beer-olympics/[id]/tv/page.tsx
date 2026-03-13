@@ -95,6 +95,7 @@ export default function TVPage({
   const { id } = use(params);
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [loading, setLoading] = useState(true);
+  const [starting, setStarting] = useState(false);
   const [winEvent, setWinEvent] = useState<WinEvent | null>(null);
   const [nowPlaying, setNowPlaying] = useState<{
     playing: boolean;
@@ -117,6 +118,18 @@ export default function TVPage({
     }
     return null;
   }, [id]);
+
+  async function startTournament() {
+    setStarting(true);
+    const res = await fetch(`/api/tournaments/${id}/start`, { method: "POST" });
+    if (res.ok) {
+      await fetchTournament();
+    } else {
+      const data = await res.json();
+      alert(data.error || "Failed to start tournament");
+    }
+    setStarting(false);
+  }
 
   const detectNewWins = useCallback(
     (data: Tournament) => {
@@ -266,6 +279,33 @@ export default function TVPage({
     return (
       <div className="flex min-h-screen items-center justify-center bg-zinc-950">
         <p className="text-2xl text-zinc-500">Tournament not found.</p>
+      </div>
+    );
+  }
+
+  // Pre-start screen
+  if (tournament.status === "setup") {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-zinc-950 text-white">
+        <h1 className="text-6xl font-black tracking-tight">
+          {tournament.name}
+        </h1>
+        <p className="mt-3 text-xl text-zinc-500">Beer Olympics</p>
+        <div className="mt-6 text-center text-sm text-zinc-500">
+          <p>{tournament.teams.length} teams &middot; {tournament.games.length} games</p>
+        </div>
+        <button
+          onClick={startTournament}
+          disabled={starting || tournament.teams.length < 2 || tournament.games.length === 0}
+          className="mt-10 rounded-full bg-emerald-600 px-10 py-4 text-lg font-bold text-white transition-all hover:bg-emerald-500 hover:scale-105 disabled:opacity-40 disabled:hover:scale-100 disabled:hover:bg-emerald-600"
+        >
+          {starting ? "Randomizing..." : "Start Tournament"}
+        </button>
+        {(tournament.teams.length < 2 || tournament.games.length === 0) && (
+          <p className="mt-3 text-sm text-zinc-600">
+            Add teams and games from the setup page first.
+          </p>
+        )}
       </div>
     );
   }
