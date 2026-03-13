@@ -240,10 +240,6 @@ export default function TVPage({
   const completedMatches = realMatches.filter(
     (m) => m.status === "completed"
   );
-  const upcomingMatches = realMatches.filter(
-    (m) => m.status !== "completed"
-  );
-
   // Team standings: count wins
   const winCounts = new Map<string, number>();
   for (const m of completedMatches) {
@@ -255,66 +251,105 @@ export default function TVPage({
     .map((t) => ({ ...t, wins: winCounts.get(t.id) ?? 0 }))
     .sort((a, b) => b.wins - a.wins);
 
-  // Current / next match
-  const gameMatchList = tournament.matches.filter((m) => !m.isFinals);
   const finalsMatchList = tournament.matches.filter((m) => m.isFinals);
 
-  // Build ordered matches (same interleaving as scorekeeper)
-  const matchesByRoundAndGame = new Map<number, Map<string, Match[]>>();
-  for (const match of gameMatchList) {
-    if (!match.gameId) continue;
-    if (!matchesByRoundAndGame.has(match.round)) {
-      matchesByRoundAndGame.set(match.round, new Map());
-    }
-    const gameMap = matchesByRoundAndGame.get(match.round)!;
-    if (!gameMap.has(match.gameId)) {
-      gameMap.set(match.gameId, []);
-    }
-    gameMap.get(match.gameId)!.push(match);
-  }
+  // Build per-game station data
+  const gameStations = tournament.games.map((tg) => {
+    const gameMatches = tournament.matches.filter(
+      (m) => m.gameId === tg.gameId && !m.isFinals
+    );
+    const realGameMatches = gameMatches.filter(
+      (m) => m.homeTeamId && m.awayTeamId
+    );
+    const completedGameMatches = realGameMatches.filter(
+      (m) => m.status === "completed"
+    );
+    const pendingMatches = realGameMatches
+      .filter((m) => m.status !== "completed")
+      .sort((a, b) => a.round - b.round || a.position - b.position);
 
-  for (const [, gameMap] of matchesByRoundAndGame) {
-    for (const [, matches] of gameMap) {
-      matches.sort((a, b) => a.position - b.position);
-    }
-  }
+    // Current match = first pending match with both teams assigned
+    const currentMatch = pendingMatches.find(
+      (m) => m.homeTeamId && m.awayTeamId
+    ) ?? null;
 
-  const rounds = Array.from(matchesByRoundAndGame.keys()).sort(
-    (a, b) => a - b
+    // On deck = second pending match
+    const onDeck = pendingMatches.length > 1 ? pendingMatches[1] : null;
+
+    // Game winner = winner of the final round match
+    const maxRound = Math.max(...gameMatches.map((m) => m.round), 0);
+    const finalMatch = gameMatches.find(
+      (m) => m.round === maxRound && m.position === 0
+    );
+    const winner = finalMatch?.status === "completed" && finalMatch.winner
+      ? finalMatch.winner
+      : null;
+
+    const isComplete = completedGameMatches.length === realGameMatches.length && realGameMatches.length > 0;
+    const isWaiting = !isComplete && currentMatch !== null &&
+      (!currentMatch.homeTeamId || !currentMatch.awayTeamId);
+
+    let status: "playing" | "complete" | "waiting" = "playing";
+    if (isComplete) status = "complete";
+    else if (!currentMatch || isWaiting) status = "waiting";
+
+    return {
+      gameId: tg.gameId,
+      gameName: tg.game.name,
+      status,
+      currentMatch,
+      onDeck,
+      winner,
+      totalMatches: realGameMatches.length,
+      completedMatches: completedGameMatches.length,
+    };
+  });
+
+  // Finals station
+  const realFinalsMatches = finalsMatchList.filter(
+    (m) => m.homeTeamId && m.awayTeamId
   );
-  const allOrdered: Match[] = [];
-  const gameIds = tournament.games.map((g) => g.gameId);
-  for (const round of rounds) {
-    const gameMap = matchesByRoundAndGame.get(round)!;
-    const maxPos = Math.max(
-      ...gameIds.map((gid) => gameMap.get(gid)?.length ?? 0),
-      0
-    );
-    for (let pos = 0; pos < maxPos; pos++) {
-      for (const gid of gameIds) {
-        const m = gameMap.get(gid)?.[pos];
-        if (m && m.homeTeamId && m.awayTeamId) allOrdered.push(m);
-      }
-    }
-  }
-  // Add finals
-  if (finalsMatchList.length > 0) {
-    const finalsTotalRounds = Math.max(
-      ...finalsMatchList.map((m) => m.round),
-      0
-    );
-    for (let r = 1; r <= finalsTotalRounds; r++) {
-      const roundMatches = finalsMatchList
-        .filter((m) => m.round === r && m.homeTeamId && m.awayTeamId)
-        .sort((a, b) => a.position - b.position);
-      allOrdered.push(...roundMatches);
-    }
-  }
+  const completedFinalsMatches = realFinalsMatches.filter(
+    (m) => m.status === "completed"
+  );
+  const pendingFinals = realFinalsMatches
+    .filter((m) => m.status !== "completed")
+    .sort((a, b) => a.round - b.round || a.position - b.position);
 
-  const nextMatch = allOrdered.find((m) => m.status !== "completed");
-  const lastCompleted = [...allOrdered]
-    .reverse()
-    .find((m) => m.status === "completed");
+  const allGamesComplete = gameStations.every((s) => s.status === "complete");
+
+  let finalsStation: {
+    status: "playing" | "complete" | "waiting";
+    currentMatch: Match | null;
+    totalMatches: number;
+    completedMatches: number;
+  } | null = null;
+
+  if (finalsMatchList.length > 0) {
+    const isFinalsComplete =
+      completedFinalsMatches.length === realFinalsMatches.length &&
+      realFinalsMatches.length > 0;
+    finalsStation = {
+      status: isFinalsComplete ? "complete" : "playing",
+      currentMatch: pendingFinals[0] ?? null,
+      totalMatches: realFinalsMatches.length,
+      completedMatches: completedFinalsMatches.length,
+    };
+  } else if (allGamesComplete) {
+    finalsStation = {
+      status: "waiting",
+      currentMatch: null,
+      totalMatches: 0,
+      completedMatches: 0,
+    };
+  } else {
+    finalsStation = {
+      status: "waiting",
+      currentMatch: null,
+      totalMatches: 0,
+      completedMatches: 0,
+    };
+  }
 
   // Find champion
   let champion: Team | null = null;
@@ -410,129 +445,209 @@ export default function TVPage({
         </div>
       )}
 
-      {/* Main content */}
-      <div className="mt-8 flex gap-8 px-12 pb-12">
-        {/* Left: Current match + upcoming */}
-        <div className="flex-1">
-          {/* Now playing */}
-          {nextMatch && (
-            <section>
-              <h2 className="mb-4 text-sm font-bold uppercase tracking-widest text-zinc-500">
-                Up Next
-              </h2>
-              <div className="rounded-2xl border border-blue-500/30 bg-blue-500/5 p-8">
-                <p className="mb-4 text-center text-sm font-semibold uppercase tracking-wide text-blue-400">
-                  {nextMatch.isFinals
-                    ? "Finals"
-                    : nextMatch.game?.name}
-                </p>
-                <div className="flex items-center justify-center gap-8">
-                  <div className="text-center">
-                    <p className="text-4xl font-black">
-                      {nextMatch.homeTeam?.name}
-                    </p>
-                    <p className="mt-1 text-sm text-zinc-500">
-                      {nextMatch.homeTeam?.members.join(", ")}
-                    </p>
-                  </div>
-                  <span className="text-3xl font-bold text-zinc-600">vs</span>
-                  <div className="text-center">
-                    <p className="text-4xl font-black">
-                      {nextMatch.awayTeam?.name}
-                    </p>
-                    <p className="mt-1 text-sm text-zinc-500">
-                      {nextMatch.awayTeam?.members.join(", ")}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </section>
-          )}
+      {/* Game stations - all games shown simultaneously */}
+      <div className="mt-8 px-12 pb-12">
+        <div className={`grid gap-6 ${
+          gameStations.length <= 2
+            ? "grid-cols-2"
+            : gameStations.length <= 4
+              ? "grid-cols-2 lg:grid-cols-4"
+              : "grid-cols-2 lg:grid-cols-3"
+        }`}>
+          {gameStations.map((station) => {
+            const isComplete = station.status === "complete";
+            const isPlaying = station.status === "playing";
+            const isWaiting = station.status === "waiting";
 
-          {/* Last result */}
-          {lastCompleted && (
-            <section className="mt-8">
-              <h2 className="mb-4 text-sm font-bold uppercase tracking-widest text-zinc-500">
-                Last Result
-              </h2>
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-                <p className="mb-2 text-center text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                  {lastCompleted.isFinals
-                    ? "Finals"
-                    : lastCompleted.game?.name}
-                </p>
-                <div className="flex items-center justify-center gap-6">
-                  <p
-                    className={`text-2xl font-bold ${
-                      lastCompleted.winnerId === lastCompleted.homeTeamId
-                        ? "text-emerald-400"
-                        : "text-zinc-600 line-through"
-                    }`}
-                  >
-                    {lastCompleted.homeTeam?.name}
-                  </p>
-                  <span className="text-xl text-zinc-700">vs</span>
-                  <p
-                    className={`text-2xl font-bold ${
-                      lastCompleted.winnerId === lastCompleted.awayTeamId
-                        ? "text-emerald-400"
-                        : "text-zinc-600 line-through"
-                    }`}
-                  >
-                    {lastCompleted.awayTeam?.name}
-                  </p>
+            return (
+              <div
+                key={station.gameId}
+                className={`rounded-2xl border p-6 transition-all ${
+                  isPlaying
+                    ? "border-blue-500/40 bg-blue-500/5"
+                    : isComplete
+                      ? "border-emerald-500/30 bg-emerald-500/5"
+                      : "border-zinc-800 bg-zinc-900/50"
+                }`}
+              >
+                {/* Game header */}
+                <div className="mb-4 flex items-center justify-between">
+                  <h3 className="text-lg font-bold">{station.gameName}</h3>
+                  {isPlaying && (
+                    <span className="rounded-full bg-blue-500/20 px-3 py-1 text-xs font-bold uppercase tracking-wide text-blue-400">
+                      Now Playing
+                    </span>
+                  )}
+                  {isComplete && (
+                    <span className="rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-bold uppercase tracking-wide text-emerald-400">
+                      Complete
+                    </span>
+                  )}
+                  {isWaiting && (
+                    <span className="rounded-full bg-zinc-700/50 px-3 py-1 text-xs font-bold uppercase tracking-wide text-zinc-400">
+                      Waiting
+                    </span>
+                  )}
                 </div>
-              </div>
-            </section>
-          )}
 
-          {/* Upcoming queue */}
-          {upcomingMatches.length > 1 && (
-            <section className="mt-8">
-              <h2 className="mb-4 text-sm font-bold uppercase tracking-widest text-zinc-500">
-                Coming Up
-              </h2>
-              <div className="flex flex-col gap-2">
-                {allOrdered
-                  .filter((m) => m.status !== "completed" && m.id !== nextMatch?.id)
-                  .slice(0, 6)
-                  .map((m) => (
-                    <div
-                      key={m.id}
-                      className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900/50 px-5 py-3"
-                    >
-                      <span className="text-xs font-medium text-zinc-500">
-                        {m.isFinals ? "Finals" : m.game?.name}
-                      </span>
-                      <span className="text-sm font-semibold">
-                        {m.homeTeam?.name ?? "TBD"}{" "}
-                        <span className="text-zinc-600">vs</span>{" "}
-                        {m.awayTeam?.name ?? "TBD"}
-                      </span>
+                {/* Current match */}
+                {station.currentMatch && (
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="w-full text-center">
+                      <p className={`text-2xl font-black ${isPlaying ? "text-white" : "text-zinc-300"}`}>
+                        {station.currentMatch.homeTeam?.name}
+                      </p>
+                      <p className="text-xs text-zinc-500">
+                        {station.currentMatch.homeTeam?.members.join(", ")}
+                      </p>
                     </div>
-                  ))}
+                    <span className="text-lg font-bold text-zinc-600">vs</span>
+                    <div className="w-full text-center">
+                      <p className={`text-2xl font-black ${isPlaying ? "text-white" : "text-zinc-300"}`}>
+                        {station.currentMatch.awayTeam?.name}
+                      </p>
+                      <p className="text-xs text-zinc-500">
+                        {station.currentMatch.awayTeam?.members.join(", ")}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Winner of completed game */}
+                {isComplete && station.winner && (
+                  <div className="mt-2 text-center">
+                    <p className="text-sm font-semibold uppercase tracking-wide text-emerald-500">
+                      Winner
+                    </p>
+                    <p className="text-2xl font-black text-emerald-400">
+                      {station.winner.name}
+                    </p>
+                  </div>
+                )}
+
+                {/* Waiting message */}
+                {isWaiting && !station.currentMatch && (
+                  <p className="text-center text-sm text-zinc-500">
+                    Waiting for teams to finish other games
+                  </p>
+                )}
+
+                {/* Progress for this game */}
+                <div className="mt-4 flex items-center gap-2">
+                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-800">
+                    <div
+                      className={`h-full rounded-full transition-all duration-500 ${
+                        isComplete ? "bg-emerald-500" : "bg-blue-500"
+                      }`}
+                      style={{
+                        width: `${station.totalMatches > 0 ? (station.completedMatches / station.totalMatches) * 100 : 0}%`,
+                      }}
+                    />
+                  </div>
+                  <span className="text-xs tabular-nums text-zinc-500">
+                    {station.completedMatches}/{station.totalMatches}
+                  </span>
+                </div>
+
+                {/* On deck for this game */}
+                {station.onDeck && station.onDeck.id !== station.currentMatch?.id && (
+                  <div className="mt-3 rounded-lg border border-zinc-800 bg-zinc-900/80 px-3 py-2 text-center">
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">On Deck</p>
+                    <p className="text-xs font-medium text-zinc-400">
+                      {station.onDeck.homeTeam?.name ?? "TBD"}{" "}
+                      <span className="text-zinc-600">vs</span>{" "}
+                      {station.onDeck.awayTeam?.name ?? "TBD"}
+                    </p>
+                  </div>
+                )}
               </div>
-            </section>
+            );
+          })}
+
+          {/* Finals station */}
+          {finalsStation && (
+            <div
+              className={`rounded-2xl border p-6 transition-all ${
+                finalsStation.status === "playing"
+                  ? "border-yellow-500/40 bg-yellow-500/5"
+                  : finalsStation.status === "complete"
+                    ? "border-yellow-500/30 bg-yellow-500/10"
+                    : "border-zinc-800 bg-zinc-900/50"
+              }`}
+            >
+              <div className="mb-4 flex items-center justify-between">
+                <h3 className="text-lg font-bold text-yellow-400">Finals</h3>
+                {finalsStation.status === "playing" && (
+                  <span className="rounded-full bg-yellow-500/20 px-3 py-1 text-xs font-bold uppercase tracking-wide text-yellow-400">
+                    Now Playing
+                  </span>
+                )}
+                {finalsStation.status === "complete" && (
+                  <span className="rounded-full bg-yellow-500/20 px-3 py-1 text-xs font-bold uppercase tracking-wide text-yellow-400">
+                    Complete
+                  </span>
+                )}
+                {finalsStation.status === "waiting" && (
+                  <span className="rounded-full bg-zinc-700/50 px-3 py-1 text-xs font-bold uppercase tracking-wide text-zinc-400">
+                    Waiting for Games
+                  </span>
+                )}
+              </div>
+
+              {finalsStation.currentMatch && (
+                <div className="flex flex-col items-center gap-2">
+                  <p className="text-2xl font-black">
+                    {finalsStation.currentMatch.homeTeam?.name}
+                  </p>
+                  <span className="text-lg font-bold text-zinc-600">vs</span>
+                  <p className="text-2xl font-black">
+                    {finalsStation.currentMatch.awayTeam?.name}
+                  </p>
+                </div>
+              )}
+
+              {finalsStation.status === "waiting" && !finalsStation.currentMatch && (
+                <p className="text-center text-sm text-zinc-500">
+                  Complete all games to unlock Finals
+                </p>
+              )}
+
+              {finalsStation.totalMatches > 0 && (
+                <div className="mt-4 flex items-center gap-2">
+                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-800">
+                    <div
+                      className="h-full rounded-full bg-yellow-500 transition-all duration-500"
+                      style={{
+                        width: `${(finalsStation.completedMatches / finalsStation.totalMatches) * 100}%`,
+                      }}
+                    />
+                  </div>
+                  <span className="text-xs tabular-nums text-zinc-500">
+                    {finalsStation.completedMatches}/{finalsStation.totalMatches}
+                  </span>
+                </div>
+              )}
+            </div>
           )}
         </div>
 
-        {/* Right: Standings */}
-        <div className="w-80 shrink-0">
+        {/* Standings */}
+        <div className="mt-8">
           <h2 className="mb-4 text-sm font-bold uppercase tracking-widest text-zinc-500">
             Standings
           </h2>
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-1">
+          <div className="flex gap-3 overflow-x-auto">
             {standings.map((team, i) => (
               <div
                 key={team.id}
-                className={`flex items-center gap-4 rounded-xl px-5 py-3 ${
+                className={`flex shrink-0 items-center gap-3 rounded-xl border px-5 py-3 ${
                   i === 0 && team.wins > 0
-                    ? "bg-yellow-500/10"
-                    : ""
+                    ? "border-yellow-500/30 bg-yellow-500/10"
+                    : "border-zinc-800 bg-zinc-900"
                 }`}
               >
                 <span
-                  className={`w-8 text-center text-lg font-black ${
+                  className={`text-2xl font-black ${
                     i === 0 && team.wins > 0
                       ? "text-yellow-400"
                       : i === 1 && team.wins > 0
@@ -544,13 +659,13 @@ export default function TVPage({
                 >
                   {i + 1}
                 </span>
-                <div className="flex-1">
+                <div>
                   <p className="font-bold">{team.name}</p>
                   <p className="text-xs text-zinc-500">
                     {team.members.join(", ")}
                   </p>
                 </div>
-                <span className="text-2xl font-black tabular-nums text-zinc-400">
+                <span className="ml-2 text-2xl font-black tabular-nums text-zinc-400">
                   {team.wins}
                 </span>
               </div>
