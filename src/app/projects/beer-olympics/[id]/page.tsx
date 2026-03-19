@@ -45,7 +45,6 @@ export default function TournamentSetup({
   const [currentMembers, setCurrentMembers] = useState<string[]>([]);
   const [poolPlayerName, setPoolPlayerName] = useState("");
   const [poolPlayers, setPoolPlayers] = useState<string[]>([]);
-  const [numTeams, setNumTeams] = useState(2);
   const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
   const [editingTeamName, setEditingTeamName] = useState("");
   const [newGameName, setNewGameName] = useState("");
@@ -176,7 +175,7 @@ export default function TournamentSetup({
   }
 
   async function generateRandomTeams() {
-    if (poolPlayers.length < numTeams) return;
+    if (poolPlayers.length < 2) return;
 
     // Shuffle players
     const shuffled = [...poolPlayers];
@@ -185,11 +184,17 @@ export default function TournamentSetup({
       [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
     }
 
-    // Distribute into teams
-    const teams: string[][] = Array.from({ length: numTeams }, () => []);
-    shuffled.forEach((player, i) => {
-      teams[i % numTeams].push(player);
-    });
+    // Teams of 2, with one team of 3 if odd
+    const teams: string[][] = [];
+    let i = 0;
+    if (shuffled.length % 2 !== 0) {
+      teams.push(shuffled.slice(0, 3));
+      i = 3;
+    }
+    while (i < shuffled.length) {
+      teams.push(shuffled.slice(i, i + 2));
+      i += 2;
+    }
 
     // Create each team via API
     const existingCount = tournament?.teams.length ?? 0;
@@ -575,39 +580,16 @@ export default function TournamentSetup({
               </div>
             )}
 
-            <div className="mt-4 flex items-center gap-3">
-              <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
-                Number of teams
-              </label>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => setNumTeams((n) => Math.max(2, n - 1))}
-                  className="rounded-md border border-zinc-300 px-2.5 py-1 text-sm font-medium transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
-                >
-                  -
-                </button>
-                <span className="w-8 text-center text-sm font-semibold">
-                  {numTeams}
-                </span>
-                <button
-                  onClick={() => setNumTeams((n) => n + 1)}
-                  className="rounded-md border border-zinc-300 px-2.5 py-1 text-sm font-medium transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
-                >
-                  +
-                </button>
-              </div>
-            </div>
-
             <button
               onClick={generateRandomTeams}
-              disabled={poolPlayers.length < numTeams}
+              disabled={poolPlayers.length < 2}
               className="mt-4 w-full rounded-md bg-zinc-900 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-40 disabled:hover:bg-zinc-900 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200 dark:disabled:hover:bg-white"
             >
-              Generate {numTeams} Random Teams
+              Generate Random Teams
             </button>
-            {poolPlayers.length > 0 && poolPlayers.length < numTeams && (
+            {poolPlayers.length === 1 && (
               <p className="mt-2 text-center text-xs text-zinc-400">
-                Add at least {numTeams} players to generate teams.
+                Add at least 2 players to generate teams.
               </p>
             )}
           </div>
