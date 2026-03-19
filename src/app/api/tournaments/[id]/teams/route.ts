@@ -19,6 +19,21 @@ export async function POST(
   return NextResponse.json(team);
 }
 
+export async function PATCH(request: Request) {
+  const { teamId, name } = await request.json();
+  if (!teamId || !name?.trim()) {
+    return NextResponse.json(
+      { error: "Team ID and name required" },
+      { status: 400 }
+    );
+  }
+  const team = await prisma.team.update({
+    where: { id: teamId },
+    data: { name: name.trim() },
+  });
+  return NextResponse.json(team);
+}
+
 export async function DELETE(request: Request) {
   const { teamId } = await request.json();
   await prisma.team.delete({ where: { id: teamId } });

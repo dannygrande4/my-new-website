@@ -40,13 +40,14 @@ export default function TournamentSetup({
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [allGames, setAllGames] = useState<Game[]>([]);
   const [selectedGameIds, setSelectedGameIds] = useState<string[]>([]);
-  const [teamMode, setTeamMode] = useState<"manual" | "random">("manual");
   const [teamName, setTeamName] = useState("");
   const [memberName, setMemberName] = useState("");
   const [currentMembers, setCurrentMembers] = useState<string[]>([]);
-  const [randomPlayerName, setRandomPlayerName] = useState("");
-  const [randomPlayers, setRandomPlayers] = useState<string[]>([]);
+  const [poolPlayerName, setPoolPlayerName] = useState("");
+  const [poolPlayers, setPoolPlayers] = useState<string[]>([]);
   const [numTeams, setNumTeams] = useState(2);
+  const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
+  const [editingTeamName, setEditingTeamName] = useState("");
   const [newGameName, setNewGameName] = useState("");
   const [creatingGame, setCreatingGame] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -163,22 +164,22 @@ export default function TournamentSetup({
     fetchTournament();
   }
 
-  function addRandomPlayer() {
-    const trimmed = randomPlayerName.trim();
+  function addPoolPlayer() {
+    const trimmed = poolPlayerName.trim();
     if (!trimmed) return;
-    setRandomPlayers((prev) => [...prev, trimmed]);
-    setRandomPlayerName("");
+    setPoolPlayers((prev) => [...prev, trimmed]);
+    setPoolPlayerName("");
   }
 
-  function removeRandomPlayer(index: number) {
-    setRandomPlayers((prev) => prev.filter((_, i) => i !== index));
+  function removePoolPlayer(index: number) {
+    setPoolPlayers((prev) => prev.filter((_, i) => i !== index));
   }
 
   async function generateRandomTeams() {
-    if (randomPlayers.length < numTeams) return;
+    if (poolPlayers.length < numTeams) return;
 
     // Shuffle players
-    const shuffled = [...randomPlayers];
+    const shuffled = [...poolPlayers];
     for (let i = shuffled.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
@@ -191,15 +192,29 @@ export default function TournamentSetup({
     });
 
     // Create each team via API
+    const existingCount = tournament?.teams.length ?? 0;
     for (let i = 0; i < teams.length; i++) {
       await fetch(`/api/tournaments/${id}/teams`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: `Team ${i + 1}`, members: teams[i] }),
+        body: JSON.stringify({ name: `Team ${existingCount + i + 1}`, members: teams[i] }),
       });
     }
 
-    setRandomPlayers([]);
+    setPoolPlayers([]);
+    fetchTournament();
+  }
+
+  async function renameTeam(teamId: string) {
+    const trimmed = editingTeamName.trim();
+    if (!trimmed) return;
+    await fetch(`/api/tournaments/${id}/teams`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ teamId, name: trimmed }),
+    });
+    setEditingTeamId(null);
+    setEditingTeamName("");
     fetchTournament();
   }
 
@@ -456,167 +471,146 @@ export default function TournamentSetup({
           </section>
         )}
 
-        {/* Add Team */}
+        {/* Create a Team */}
         <section className="mt-10">
-          <h2 className="text-lg font-semibold">Add Teams</h2>
+          <h2 className="text-lg font-semibold">Create a Team</h2>
+          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+            Already know your team? Add it directly.
+          </p>
+          <div className="mt-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+            <input
+              type="text"
+              placeholder="Team name"
+              value={teamName}
+              onChange={(e) => setTeamName(e.target.value)}
+              className="w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:focus:border-zinc-500"
+            />
 
-          {/* Mode Toggle */}
-          <div className="mt-3 flex rounded-lg border border-zinc-200 p-1 dark:border-zinc-800">
-            <button
-              onClick={() => setTeamMode("manual")}
-              className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                teamMode === "manual"
-                  ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900"
-                  : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
-              }`}
-            >
-              I know the teams
-            </button>
-            <button
-              onClick={() => setTeamMode("random")}
-              className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                teamMode === "random"
-                  ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900"
-                  : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
-              }`}
-            >
-              Randomize teams
-            </button>
-          </div>
-
-          {teamMode === "manual" ? (
-            <div className="mt-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+            <div className="mt-3 flex gap-2">
               <input
                 type="text"
-                placeholder="Team name"
-                value={teamName}
-                onChange={(e) => setTeamName(e.target.value)}
-                className="w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:focus:border-zinc-500"
+                placeholder="Member name"
+                value={memberName}
+                onChange={(e) => setMemberName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && addMember()}
+                className="flex-1 rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:focus:border-zinc-500"
               />
-
-              <div className="mt-3 flex gap-2">
-                <input
-                  type="text"
-                  placeholder="Member name"
-                  value={memberName}
-                  onChange={(e) => setMemberName(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && addMember()}
-                  className="flex-1 rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:focus:border-zinc-500"
-                />
-                <button
-                  onClick={addMember}
-                  className="rounded-md bg-zinc-200 px-3 py-2 text-sm font-medium transition-colors hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700"
-                >
-                  Add
-                </button>
-              </div>
-
-              {currentMembers.length > 0 && (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {currentMembers.map((member, i) => (
-                    <span
-                      key={i}
-                      className="flex items-center gap-1 rounded-full bg-zinc-100 px-3 py-1 text-sm dark:bg-zinc-800"
-                    >
-                      {member}
-                      <button
-                        onClick={() => removeMember(i)}
-                        className="ml-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
-                      >
-                        &times;
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              )}
-
               <button
-                onClick={addTeam}
-                disabled={!teamName.trim() || currentMembers.length === 0}
-                className="mt-4 w-full rounded-md bg-zinc-900 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-40 disabled:hover:bg-zinc-900 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200 dark:disabled:hover:bg-white"
+                onClick={addMember}
+                className="rounded-md bg-zinc-200 px-3 py-2 text-sm font-medium transition-colors hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700"
               >
-                Add Team
+                Add
               </button>
             </div>
-          ) : (
-            <div className="mt-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
-              <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                Add everyone&apos;s names and we&apos;ll randomly split them into teams.
-              </p>
 
-              <div className="mt-3 flex gap-2">
-                <input
-                  type="text"
-                  placeholder="Player name"
-                  value={randomPlayerName}
-                  onChange={(e) => setRandomPlayerName(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && addRandomPlayer()}
-                  className="flex-1 rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:focus:border-zinc-500"
-                />
-                <button
-                  onClick={addRandomPlayer}
-                  className="rounded-md bg-zinc-200 px-3 py-2 text-sm font-medium transition-colors hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700"
-                >
-                  Add
-                </button>
-              </div>
-
-              {randomPlayers.length > 0 && (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {randomPlayers.map((player, i) => (
-                    <span
-                      key={i}
-                      className="flex items-center gap-1 rounded-full bg-zinc-100 px-3 py-1 text-sm dark:bg-zinc-800"
-                    >
-                      {player}
-                      <button
-                        onClick={() => removeRandomPlayer(i)}
-                        className="ml-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
-                      >
-                        &times;
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              <div className="mt-4 flex items-center gap-3">
-                <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
-                  Number of teams
-                </label>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => setNumTeams((n) => Math.max(2, n - 1))}
-                    className="rounded-md border border-zinc-300 px-2.5 py-1 text-sm font-medium transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
+            {currentMembers.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {currentMembers.map((member, i) => (
+                  <span
+                    key={i}
+                    className="flex items-center gap-1 rounded-full bg-zinc-100 px-3 py-1 text-sm dark:bg-zinc-800"
                   >
-                    -
-                  </button>
-                  <span className="w-8 text-center text-sm font-semibold">
-                    {numTeams}
+                    {member}
+                    <button
+                      onClick={() => removeMember(i)}
+                      className="ml-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+                    >
+                      &times;
+                    </button>
                   </span>
-                  <button
-                    onClick={() => setNumTeams((n) => n + 1)}
-                    className="rounded-md border border-zinc-300 px-2.5 py-1 text-sm font-medium transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
-                  >
-                    +
-                  </button>
-                </div>
+                ))}
               </div>
+            )}
 
+            <button
+              onClick={addTeam}
+              disabled={!teamName.trim() || currentMembers.length === 0}
+              className="mt-4 w-full rounded-md bg-zinc-900 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-40 disabled:hover:bg-zinc-900 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200 dark:disabled:hover:bg-white"
+            >
+              Add Team
+            </button>
+          </div>
+        </section>
+
+        {/* Player Pool */}
+        <section className="mt-10">
+          <h2 className="text-lg font-semibold">Player Pool</h2>
+          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+            Don&apos;t have a team? Jump in the pool and get randomly assigned.
+          </p>
+          <div className="mt-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="Player name"
+                value={poolPlayerName}
+                onChange={(e) => setPoolPlayerName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && addPoolPlayer()}
+                className="flex-1 rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:focus:border-zinc-500"
+              />
               <button
-                onClick={generateRandomTeams}
-                disabled={randomPlayers.length < numTeams}
-                className="mt-4 w-full rounded-md bg-zinc-900 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-40 disabled:hover:bg-zinc-900 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200 dark:disabled:hover:bg-white"
+                onClick={addPoolPlayer}
+                className="rounded-md bg-zinc-200 px-3 py-2 text-sm font-medium transition-colors hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700"
               >
-                Generate {numTeams} Random Teams
+                Add
               </button>
-              {randomPlayers.length > 0 && randomPlayers.length < numTeams && (
-                <p className="mt-2 text-center text-xs text-zinc-400">
-                  Add at least {numTeams} players to generate teams.
-                </p>
-              )}
             </div>
-          )}
+
+            {poolPlayers.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {poolPlayers.map((player, i) => (
+                  <span
+                    key={i}
+                    className="flex items-center gap-1 rounded-full bg-zinc-100 px-3 py-1 text-sm dark:bg-zinc-800"
+                  >
+                    {player}
+                    <button
+                      onClick={() => removePoolPlayer(i)}
+                      className="ml-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+                    >
+                      &times;
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            <div className="mt-4 flex items-center gap-3">
+              <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
+                Number of teams
+              </label>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setNumTeams((n) => Math.max(2, n - 1))}
+                  className="rounded-md border border-zinc-300 px-2.5 py-1 text-sm font-medium transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
+                >
+                  -
+                </button>
+                <span className="w-8 text-center text-sm font-semibold">
+                  {numTeams}
+                </span>
+                <button
+                  onClick={() => setNumTeams((n) => n + 1)}
+                  className="rounded-md border border-zinc-300 px-2.5 py-1 text-sm font-medium transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+
+            <button
+              onClick={generateRandomTeams}
+              disabled={poolPlayers.length < numTeams}
+              className="mt-4 w-full rounded-md bg-zinc-900 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-40 disabled:hover:bg-zinc-900 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200 dark:disabled:hover:bg-white"
+            >
+              Generate {numTeams} Random Teams
+            </button>
+            {poolPlayers.length > 0 && poolPlayers.length < numTeams && (
+              <p className="mt-2 text-center text-xs text-zinc-400">
+                Add at least {numTeams} players to generate teams.
+              </p>
+            )}
+          </div>
         </section>
 
         {/* Teams List */}
@@ -631,18 +625,72 @@ export default function TournamentSetup({
                   key={team.id}
                   className="flex items-center justify-between rounded-lg border border-zinc-200 px-4 py-3 dark:border-zinc-800"
                 >
-                  <div>
-                    <p className="font-medium">{team.name}</p>
-                    <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                      {team.members.join(", ")}
-                    </p>
+                  <div className="min-w-0 flex-1">
+                    {editingTeamId === team.id ? (
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          renameTeam(team.id);
+                        }}
+                        className="flex items-center gap-2"
+                      >
+                        <input
+                          type="text"
+                          value={editingTeamName}
+                          onChange={(e) => setEditingTeamName(e.target.value)}
+                          autoFocus
+                          className="w-full rounded-md border border-zinc-300 bg-transparent px-2 py-1 text-sm font-medium outline-none focus:border-zinc-500 dark:border-zinc-700 dark:focus:border-zinc-500"
+                          onKeyDown={(e) => {
+                            if (e.key === "Escape") {
+                              setEditingTeamId(null);
+                              setEditingTeamName("");
+                            }
+                          }}
+                        />
+                        <button
+                          type="submit"
+                          disabled={!editingTeamName.trim()}
+                          className="text-sm font-medium text-blue-500 hover:text-blue-600 disabled:opacity-40"
+                        >
+                          Save
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingTeamId(null);
+                            setEditingTeamName("");
+                          }}
+                          className="text-sm text-zinc-400 hover:text-zinc-600"
+                        >
+                          Cancel
+                        </button>
+                      </form>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setEditingTeamId(team.id);
+                          setEditingTeamName(team.name);
+                        }}
+                        className="group flex items-center gap-1.5 text-left"
+                      >
+                        <p className="font-medium">{team.name}</p>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-zinc-300 group-hover:text-zinc-500 dark:text-zinc-600 dark:group-hover:text-zinc-400"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+                      </button>
+                    )}
+                    {editingTeamId !== team.id && (
+                      <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                        {team.members.join(", ")}
+                      </p>
+                    )}
                   </div>
-                  <button
-                    onClick={() => removeTeam(team.id)}
-                    className="text-sm text-zinc-400 hover:text-red-500"
-                  >
-                    Remove
-                  </button>
+                  {editingTeamId !== team.id && (
+                    <button
+                      onClick={() => removeTeam(team.id)}
+                      className="ml-3 text-sm text-zinc-400 hover:text-red-500"
+                    >
+                      Remove
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
