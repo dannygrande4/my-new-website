@@ -81,6 +81,9 @@ export default function Home() {
           justify-content: center;
           background: radial-gradient(120% 120% at 50% 20%, #0a0b1a 0%, #05060d 55%, #020208 100%);
           font-family: var(--font-geist-sans), system-ui, sans-serif;
+          cursor: pointer;
+          user-select: none;
+          -webkit-user-select: none;
         }
 
         .name {
