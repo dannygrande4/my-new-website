@@ -72,6 +72,8 @@ export default function Home() {
       <h1 className="name">Daniel Grande</h1>
 
       <style>{`
+        html, body { background: #05060d; margin: 0; }
+
         .landing {
           position: fixed;
           top: 0;
@@ -113,7 +115,6 @@ export default function Home() {
           background-clip: text;
           -webkit-text-fill-color: transparent;
           text-shadow: 0 0 40px rgba(140, 150, 255, 0.25);
-          filter: drop-shadow(0 2px 30px rgba(90, 100, 220, 0.35));
           animation: rise 1.4s cubic-bezier(0.2, 0.7, 0.2, 1) both;
         }
 
