@@ -74,7 +74,11 @@ export default function Home() {
       <style>{`
         .landing {
           position: fixed;
-          inset: 0;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100vh;
+          height: 100dvh;
           overflow: hidden;
           display: flex;
           align-items: center;
@@ -84,6 +88,10 @@ export default function Home() {
           cursor: pointer;
           user-select: none;
           -webkit-user-select: none;
+          -webkit-tap-highlight-color: transparent;
+          -webkit-touch-callout: none;
+          touch-action: manipulation;
+          overscroll-behavior: none;
         }
 
         .name {
@@ -93,8 +101,11 @@ export default function Home() {
           padding: 0 1.5rem;
           text-align: center;
           font-weight: 600;
-          font-size: clamp(2.75rem, 9vw, 7rem);
+          font-size: clamp(2.25rem, 9vw, 7rem);
           letter-spacing: -0.03em;
+          user-select: none;
+          -webkit-user-select: none;
+          -webkit-tap-highlight-color: transparent;
           line-height: 1.05;
           color: #f4f5ff;
           background: linear-gradient(180deg, #ffffff 0%, #cfd4ff 60%, #a9b0ff 100%);

@@ -17,6 +17,12 @@ export const metadata: Metadata = {
   description: "Personal site of Daniel Grande",
 };
 
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: "#05060d",
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
