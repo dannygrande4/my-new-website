@@ -903,7 +903,9 @@ function viewLeagues() {
       ${rows.map(r => `<div style="display:flex;gap:12px;align-items:center;padding:12px 20px;border-top:1px solid rgba(255,255,255,.07)">
         <span class="thead" style="width:96px;flex:none">${esc(r)}</span><div style="min-width:0">${cell(r, lg)}</div></div>`).join('')}`); }).join('');
   return `<div class="wrap">${header('Leagues', `Through week ${Math.max(1, S.week - 1)} · ${S.leagues.length} leagues`,
-      `<button class="btn" data-act="conflicts">Conflicts</button>`)}
+      `<span class="sub dim">@${esc(S.username)}</span>
+       <button class="btn" data-act="conflicts">Conflicts</button>
+       <button class="btn" data-act="signout">Sign out</button>`)}
     <div class="onlywide">${panel(grid)}</div>
     <div class="onlynarrow">${cards}</div></div>`;
 }
@@ -1190,6 +1192,11 @@ document.addEventListener('click', async e => {
   else if (a === 'unwatch') { S.watch = S.watch.filter(x => x !== act.dataset.pid); LS.set('watch', S.watch); render(); }
   else if (a === 'clearsearch') { UI.playerQ = ''; render(); }
   else if (a === 'showallbox') { UI.showAllBox = true; render(); }
+  else if (a === 'signout') {
+    if (!confirm('Sign out and clear this browser\u2019s cached data?')) return;
+    Object.keys(localStorage).filter(k => k.startsWith('ffc.')).forEach(k => localStorage.removeItem(k));
+    location.reload();
+  }
   else if (a === 'conflicts') openSheet(conflictsHTML());
   else if (a === 'closesheet') $('#sheet').close();
 });
