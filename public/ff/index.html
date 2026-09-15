@@ -6,6 +6,12 @@
 <meta name="color-scheme" content="dark">
 <title>FF Consolidator</title>
 <meta name="description" content="All your Sleeper leagues on one screen.">
+<script>
+/* Served at a directory path without a trailing slash (e.g. /ff), relative asset URLs would
+   resolve against the parent (/app.js) and 404. Normalise to /ff/ before anything else loads. */
+(function(){var p=location.pathname;if(p!=='/'&&!p.endsWith('/')&&!/\.[a-z0-9]+$/i.test(p)){
+  location.replace(p+'/'+location.search+location.hash);}})();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&display=swap" rel="stylesheet">
