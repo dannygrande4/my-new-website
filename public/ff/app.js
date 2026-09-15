@@ -50,6 +50,9 @@ const api = {
   scores: (s, wk) => get(`/v1/scores/nfl/regular/${s}/${wk}`),
   weekStats: (s, wk) => get(`/v1/stats/nfl/regular/${s}/${wk}`),
   playerWeeks: (id, s) => get(`/stats/nfl/player/${id}?season_type=regular&season=${s}&grouping=week`),
+  projections: (s, wk) => get(`/v1/projections/nfl/regular/${s}/${wk}`),
+  playerProjWeeks: (id, s) => get(`/projections/nfl/player/${id}?season_type=regular&season=${s}&grouping=week`),
+  transactions: (id, wk) => get(`/v1/league/${id}/transactions/${wk}`),
   news: id => get(`/players/nfl/${id}/news`),
   async plays(season, week, gameID) {
     const q = `query { plays(sport: "nfl", season_type: "regular", season: "${season}", week: ${week}, game_id: "${gameID}") { play_id sequence time game_id metadata play_stats { player_id stats } } }`;
@@ -79,14 +82,25 @@ const S = {
   plays: {},                // gameID -> [play]
   newsCache: {},            // pid -> [news]
   playerWeeks: {},          // pid -> {week: stats}
+  projections: {},          // week -> {pid: stats}   (Sleeper's weekly projection lines)
+  projFetched: {},          // week -> ms
+  playerProj: {},           // pid -> {week: stats}
+  tx: {},                   // leagueID -> [transaction]
   watch: LS.get('watch', []),
+  watchChanges: LS.get('watchChanges', {}) || {},
   tab: 'matchups', gameday: false, gamedayTimer: null, lastPoll: null,
+  autoGameday: LS.get('autoGameday', true),
+  gamedayOverrideUntil: LS.get('gamedayOverrideUntil', 0) || 0,
+  autoTimer: null, lastLiveAt: 0,
+  sheetCur: null, sheetStack: [], sheetToken: 0,
   syncing: false, syncMsg: '', error: null, changed: new Set()
 };
 
 // ---------- derived (mirrors the iOS AppModel) ----------
 const P = id => S.players[id];
-const pname = id => (P(id) && P(id).n) || id;
+// While the player database is still downloading there are no names at all; a raw Sleeper id is
+// noise, so show an ellipsis until it lands.
+const pname = id => (P(id) && P(id).n) || (Object.keys(S.players).length ? String(id) : '…');
 const pteam = id => P(id) && P(id).t;
 const ppos = id => (P(id) && P(id).p) || '?';
 
@@ -171,6 +185,39 @@ function scoringNote(lg) {
   if ((s.bonus_rec_te || 0) > 0) parts.push('TE premium');
   if ((lg.league.roster_positions || []).includes('SUPER_FLEX')) parts.push('SF');
   return parts.join(' · ');
+}
+
+// ---------- projections ----------
+/** Sleeper's projection lines carry ADP/rank/pre-scored keys we never use; they are 2/3 of the payload. */
+const PROJ_NOISE = /^(adp_|pos_adp|pts_|rank_|pos_rank)/;
+function slimProjMap(raw) {
+  const out = {};
+  for (const id in raw) {
+    const v = raw[id]; if (!v) continue;
+    const s = {};
+    for (const k in v) { if (PROJ_NOISE.test(k) || k === 'gp') continue; s[k] = v[k]; }
+    if (Object.keys(s).length) out[id] = s;
+  }
+  return out;
+}
+const projStats = (pid, wk) => { const m = S.projections[wk == null ? S.week : wk]; return (m && m[pid]) || null; };
+/** Projected points for one player under one league's scoring. null when Sleeper has no line. */
+function projPoints(pid, wk, lg) {
+  const st = projStats(pid, wk);
+  return st ? scoreOf(st, scoringOf(lg)) : null;
+}
+/** Where a matchup should end up: finals count, live players take the better of actual vs projection. */
+function projectedTotal(m, lg) {
+  if (!m) return 0;
+  let t = 0;
+  for (const pid of realStarters(m)) {
+    const actual = (m.players_points || {})[pid] || 0;
+    const pr = projPoints(pid, S.week, lg);
+    if (isOver(pid, S.week)) t += actual;
+    else if (isLive(pid, S.week)) t += Math.max(actual, pr == null ? 0 : pr);
+    else t += pr == null ? 0 : pr;
+  }
+  return t;
 }
 function standings(lg) {
   const rows = lg.rosters.map(r => {
@@ -280,10 +327,10 @@ function statSummary(st, pos) {
 // ---------- sync ----------
 function slimGame(g) { return {game_id: g.game_id, week: g.week, status: g.status, m: g.metadata || {}}; }
 
+const playersStale = () => !Object.keys(S.players).length || Date.now() - (S.playersFetched || 0) > 24 * 3600 * 1000;
+
 async function loadPlayers(force) {
-  const stale = Date.now() - (S.playersFetched || 0) > 24 * 3600 * 1000;
-  if (!force && Object.keys(S.players).length && !stale) return;
-  S.syncMsg = 'Downloading player database (about 15 MB, once a day)…'; render();
+  if (!force && !playersStale()) return;
   const raw = await api.players();
   const slim = {};
   for (const id in raw) {
@@ -311,6 +358,89 @@ async function loadScores(allWeeks) {
     if (w < S.week && S.scores[w] && S.scores[w].length && S.scores[w].every(g => g.m.is_over)) return;
     try { S.scores[w] = (await api.scores(S.season, w)).map(slimGame); } catch {}
   }));
+}
+
+/** Projections for one week. Cached in localStorage (~200 KB slimmed); older weeks are evicted. */
+const PROJ_TTL = 10 * 60 * 1000;
+async function loadProjections(wk) {
+  wk = wk || S.week;
+  const key = `proj.${S.season}.${wk}`;
+  if (!S.projections[wk]) {
+    const cached = LS.get(key, null);
+    if (cached) S.projections[wk] = cached;   // paint from cache while the network call runs
+  }
+  // Projections only move between games, so a 10 minute floor keeps the 45 s gameday poll from
+  // re-pulling half a megabyte every time.
+  if (S.projFetched[wk] && Date.now() - S.projFetched[wk] < PROJ_TTL) return S.projections[wk];
+  try {
+    const slim = slimProjMap(await api.projections(S.season, wk));
+    S.projections[wk] = slim;
+    S.projFetched[wk] = Date.now();
+    try {
+      Object.keys(localStorage).filter(k => k.startsWith('ffc.proj.') && k !== 'ffc.' + key)
+        .forEach(k => localStorage.removeItem(k));
+    } catch {}
+    LS.set(key, slim);
+  } catch {}
+  return S.projections[wk] || {};
+}
+
+/** Per-player weekly projections, used to fill the future rows of the player panel's week table. */
+async function loadPlayerProj(pid) {
+  if (S.playerProj[pid]) return S.playerProj[pid];
+  let raw = {}; try { raw = await api.playerProjWeeks(pid, S.season); } catch {}
+  const out = {};
+  for (const k in raw) if (raw[k] && raw[k].stats) out[Number(k)] = raw[k].stats;
+  S.playerProj[pid] = out; return out;
+}
+
+/** Completed transactions for the current week, newest first. */
+async function loadTx(lid) {
+  if (S.tx[lid]) return S.tx[lid];
+  let t = [];
+  try { t = await api.transactions(lid, S.week); } catch {}
+  S.tx[lid] = (t || []).filter(x => x && x.status === 'complete').sort((a, b) => (b.created || 0) - (a.created || 0));
+  return S.tx[lid];
+}
+
+// ---------- watchlist change tracking ----------
+const availMap = pid => { const m = {}; S.leagues.forEach(lg => { m[lg.id] = ownership(lg, pid).k; }); return m; };
+function notifyFree(pid, lgName) {
+  try {
+    if ('Notification' in window && Notification.permission === 'granted')
+      new Notification(`${pname(pid)} is a free agent`, {body: `Free in ${lgName}`, tag: 'ffc-' + pid});
+  } catch {}
+}
+/** Asked once, the first time anything is watched — never again, whatever the answer was. */
+function askNotify() {
+  if (LS.get('notifyAsked', false)) return;
+  LS.set('notifyAsked', true);
+  try { if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission(); } catch {}
+}
+/** Diff every watched player's per-league availability against the last snapshot and log the flips. */
+function trackWatch(notify) {
+  if (!S.leagues.length) return;
+  const prev = LS.get('watchState', {}) || {};
+  const changes = LS.get('watchChanges', {}) || {};
+  const next = {};
+  for (const pid of S.watch) {
+    const cur = availMap(pid); next[pid] = cur;
+    const old = prev[pid]; if (!old) continue;
+    for (const lid in cur) {
+      const was = old[lid]; if (!was || was === cur[lid]) continue;
+      const lg = S.leagues.find(l => l.id === lid);
+      const nm = lg ? lg.name : lid;
+      if (cur[lid] === 'free') {
+        changes[pid] = {at: Date.now(), note: 'Free in ' + nm, free: true};
+        if (notify !== false) notifyFree(pid, nm);
+      } else if (was === 'free') {
+        changes[pid] = {at: Date.now(), note: 'Claimed in ' + nm, free: false};
+      }
+    }
+  }
+  for (const pid in changes) if (!S.watch.includes(pid)) delete changes[pid];
+  LS.set('watchState', next); LS.set('watchChanges', changes);
+  S.watchChanges = changes;
 }
 
 async function loadLeagues() {
@@ -345,13 +475,27 @@ async function fullSync(firstRun) {
     await loadLeagues();
     await loadSchedule();
     await loadScores(true);
-    await loadPlayers(firstRun);
+    S.tx = {};   // transactions are re-pulled the next time a league sheet opens
     S.lastPoll = Date.now();
   } catch (e) {
     S.error = e.message || String(e);
-  } finally {
     S.syncing = false; S.syncMsg = ''; render();
+    return;
   }
+  // Leagues, schedule and scores are in — that is everything the screens need to be useful, so
+  // paint now. The 15 MB player dump streams in behind a status line instead of blocking the app.
+  const needPlayers = playersStale();
+  S.syncing = needPlayers;
+  S.syncMsg = needPlayers ? 'Downloading player database… names appear shortly' : '';
+  render();
+  loadProjections(S.week).then(() => render()).catch(() => {});
+  if (needPlayers) {
+    try { await loadPlayers(true); }
+    catch (e) { S.error = 'Player database: ' + (e.message || String(e)); }
+    S.syncing = false; S.syncMsg = '';
+  }
+  trackWatch(!firstRun);
+  render();
 }
 
 /** Gameday poll: matchups + scores only. Returns the set of keys whose points moved. */
@@ -369,6 +513,7 @@ async function pollMatchups() {
     lg.matchups = fresh;
   }));
   await loadScores(false);
+  await loadProjections(S.week);
   S.lastPoll = Date.now();
   return changed;
 }
@@ -435,12 +580,25 @@ function viewOnboarding() {
 }
 
 // ---------- matchups ----------
-function leanOf(mine, theirs, myLeft, thLeft, started) {
+/** Before kickoff there is no score to lean on, so lean on the projections instead. */
+function leanOf(mine, theirs, myLeft, thLeft, started, projMine, projTheirs) {
   const d = mine - theirs;
-  if (!started) return {text: 'Kickoff soon', color: 'rgba(238,242,248,.6)'};
+  if (!started) {
+    const pd = (projMine || 0) - (projTheirs || 0);
+    if (projMine || projTheirs)
+      return {text: `Proj ${pd >= 0 ? '+' : '−'}${pts(Math.abs(pd))}`, color: T.amber};
+    return {text: 'Kickoff soon', color: 'rgba(238,242,248,.6)'};
+  }
   if (!myLeft && !thLeft) return d >= 0 ? {text: 'Win', color: T.mint} : {text: 'Loss', color: T.coral};
   if (Math.abs(d) < 5) return {text: 'Toss-up', color: T.amber};
   return d > 0 ? {text: `Leading +${pts(d)}`, color: T.mint} : {text: `Trailing −${pts(-d)}`, color: T.coral};
+}
+/** 'pre' until someone on either side kicks off, 'final' once every starter is done. */
+function matchupPhase(starters) {
+  if (!starters.length) return 'pre';
+  if (starters.some(p => isLive(p, S.week))) return 'live';
+  if (starters.every(p => isOver(p, S.week))) return 'final';
+  return starters.some(p => isOver(p, S.week)) ? 'live' : 'pre';
 }
 const remaining = (lg, m) => realStarters(m).filter(p => !isOver(p, S.week)).length;
 const livePlayers = (lg, m) => realStarters(m).filter(p => isLive(p, S.week));
@@ -448,11 +606,13 @@ const upcomingPlayers = (lg, m) => realStarters(m).filter(p => isUpcoming(p, S.w
 
 function matchupCard(lg) {
   const mine = myMatchup(lg), opp = oppMatchup(lg);
-  const my = (mine && mine.points) || 0, th = (opp && opp.points) || 0;
-  const myLeft = remaining(lg, mine), thLeft = remaining(lg, opp);
-  const lean = leanOf(my, th, myLeft, thLeft, my + th > 0);
   if (!mine) return panel(`<div style="padding:22px"><b>${esc(lg.name)}</b><p class="muted">${
     lg.myRosterID == null ? "Your roster wasn't found in this league." : 'No matchup this week.'}</p></div>`);
+  const my = (mine && mine.points) || 0, th = (opp && opp.points) || 0;
+  const myLeft = remaining(lg, mine), thLeft = remaining(lg, opp);
+  const pMy = projectedTotal(mine, lg), pTh = projectedTotal(opp, lg);
+  const phase = matchupPhase([...realStarters(mine), ...realStarters(opp)]);
+  const lean = leanOf(my, th, myLeft, thLeft, phase !== 'pre', pMy, pTh);
   const st = standings(lg);
   const rec = rid => { const r = st.find(x => x.rosterID === rid); return r ? `${r.wins}-${r.losses} · ${ordinal(r.rank)}` : ''; };
   const slots = (lg.league.roster_positions || []).filter(s => !['BN','IR','TAXI'].includes(s));
@@ -481,10 +641,13 @@ function matchupCard(lg) {
         ${statusPill(lean.text, lean.color)}</div>
       <div style="display:flex;align-items:baseline;margin-top:12px;gap:10px">
         <div style="flex:1;min-width:0"><div class="thead">${esc(teamName(lg, mine.roster_id))}</div>
-          <div class="num gd-score" style="font-size:52px">${pts(my)}</div></div>
-        <div class="dim" style="font-size:12px">${myLeft + thLeft ? 'live' : 'final'}</div>
-        <div style="flex:1;min-width:0;text-align:right"><div class="thead">${esc(opp ? teamName(lg, opp.roster_id) : '—')}</div>
-          <div class="num gd-score" style="font-size:52px;opacity:.55">${pts(th)}</div></div></div>
+          <div class="num gd-score" style="font-size:52px">${pts(my)}</div>
+          <div class="num muted" style="font-size:13px">proj ${pts(pMy)}</div></div>
+        <div class="dim" style="font-size:12px">${phase}</div>
+        <div style="flex:1;min-width:0;text-align:right">
+          <div class="thead">${opp ? `<button data-roster="${esc(lg.id)}|${esc(opp.roster_id)}" style="font:inherit;color:inherit;text-transform:inherit;letter-spacing:inherit;padding:0;text-decoration:underline;text-decoration-color:var(--div3);max-width:100%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${esc(teamName(lg, opp.roster_id))}</button>` : '—'}</div>
+          <div class="num gd-score" style="font-size:52px;opacity:.55">${pts(th)}</div>
+          <div class="num muted" style="font-size:13px">proj ${pts(pTh)}</div></div></div>
       <div style="display:flex;justify-content:space-between;font-size:13px;margin-top:6px" class="muted">
         <span>${rec(mine.roster_id)}</span><span>${opp ? rec(opp.roster_id) : ''}</span></div>
     </div>
@@ -499,9 +662,15 @@ function matchupCard(lg) {
 
 function viewMatchups() {
   if (S.gameday) return viewGameday();
+  const suppressed = Date.now() < (S.gamedayOverrideUntil || 0);
+  const autoTitle = !S.autoGameday ? 'Gameday will not open on its own'
+    : (suppressed ? 'Paused until ' + new Date(S.gamedayOverrideUntil).toLocaleTimeString(undefined, {hour:'numeric', minute:'2-digit'})
+    : 'Opens gameday when your players are live or about to kick off');
+  const auto = `<button class="btn ${S.autoGameday && !suppressed ? 'accent' : ''}" data-act="toggle-auto"
+      title="${esc(autoTitle)}">Auto-start gameday · ${S.autoGameday ? (suppressed ? 'paused' : 'on') : 'off'}</button>`;
   return `<div class="wrap">
     ${header('Week ' + S.week, `${S.seasonType[0].toUpperCase()}${S.seasonType.slice(1)} season · ${S.leagues.length} matchups`,
-      `${syncLine()}<button class="btn" data-act="gameday-on">Enter gameday</button>`)}
+      `${syncLine()}${auto}<button class="btn" data-act="gameday-on">Enter gameday</button>`)}
     <div class="grid3">${S.leagues.map(matchupCard).join('')}</div></div>`;
 }
 
@@ -539,17 +708,19 @@ function gamedayColumn(lg) {
   const block = (label, left, score, isMine, key) => `
     <div style="margin-top:${isMine ? 16 : 10}px">
       <div style="display:flex;align-items:baseline;gap:8px">
-        <span style="font-size:17px;font-weight:600;${isMine?'':'opacity:.6'};overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${esc(label)}</span>
+        <span style="font-size:17px;font-weight:600;${isMine?'':'opacity:.6'};overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${label}</span>
         <span style="flex:1"></span><span style="font-size:17px;opacity:.6;white-space:nowrap">${left} left</span></div>
       <div class="num gd-score" style="font-size:clamp(46px,5.6vw,84px);${isMine?'':'opacity:.5'};
         ${isMine?`text-shadow:0 0 34px ${color}59;`:''}${S.changed.has(key)?'background:rgba(94,224,176,.12);border-radius:10px;':''}">${pts(score)}</div>
     </div>`;
-  const tile = (title, a, b) => `<div class="tile" style="flex:1;padding:12px 16px;min-width:0">
-      <div class="thead" style="font-size:12px">${title}</div>
+  // `bare` drops the you/them words — the projected totals are four characters wide and would
+  // push them off the edge of a narrow column.
+  const tile = (title, a, b, size, bare) => `<div class="tile" style="flex:1;padding:12px 16px;min-width:0">
+      <div class="thead" style="font-size:12px">${title}${bare ? ` <span style="opacity:.6">you/them</span>` : ''}</div>
       <div style="display:flex;align-items:baseline;gap:5px;margin-top:2px;white-space:nowrap">
-        <span class="num" style="font-size:34px;font-weight:700">${a}</span><span style="font-size:11px;opacity:.5">you</span>
+        <span class="num" style="font-size:${size||34}px;font-weight:700">${a}</span>${bare ? '' : '<span style="font-size:11px;opacity:.5">you</span>'}
         <span class="num" style="font-size:19px;opacity:.3">/</span>
-        <span class="num" style="font-size:34px;font-weight:700;opacity:.5">${b}</span><span style="font-size:11px;opacity:.35">them</span>
+        <span class="num" style="font-size:${size||34}px;font-weight:700;opacity:.5">${b}</span>${bare ? '' : '<span style="font-size:11px;opacity:.35">them</span>'}
       </div></div>`;
   const fieldRows = (m, isMine) => {
     const pool = livePlayers(lg, m).length ? livePlayers(lg, m) : upcomingPlayers(lg, m);
@@ -572,10 +743,11 @@ function gamedayColumn(lg) {
     <div style="font-size:24px;font-weight:700;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${esc(lg.name)}</div>
     <div style="margin-top:8px">${statusPill(leading ? `Leading +${pts(d)}` : `Trailing −${pts(-d)}`, color, 19)}</div>
     ${block('YOU', remaining(lg, mine), my, true, mine ? `${lg.id}:r${mine.roster_id}` : '')}
-    ${block(opp ? teamName(lg, opp.roster_id).toUpperCase() : '—', remaining(lg, opp), th, false, opp ? `${lg.id}:r${opp.roster_id}` : '')}
+    ${block(opp ? `<button data-roster="${esc(lg.id)}|${esc(opp.roster_id)}" style="font:inherit;padding:0;max-width:100%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;text-decoration:underline;text-decoration-color:var(--div3)">${esc(teamName(lg, opp.roster_id).toUpperCase())}</button>` : '—',
+        remaining(lg, opp), th, false, opp ? `${lg.id}:r${opp.roster_id}` : '')}
     <div style="display:flex;gap:12px;margin-top:14px;flex-wrap:wrap">
       ${tile('LIVE', livePlayers(lg, mine).length, livePlayers(lg, opp).length)}
-      ${tile('TO PLAY', upcomingPlayers(lg, mine).length, upcomingPlayers(lg, opp).length)}</div>
+      ${tile('PROJECTED', pts(projectedTotal(mine, lg)), pts(projectedTotal(opp, lg)), 26, true)}</div>
     <div style="flex:1;min-height:12px"></div>
     <div style="border-top:1px solid var(--div2);margin:10px 0"></div>
     <div class="thead" style="font-size:13px">On the field now</div>
@@ -624,7 +796,8 @@ function viewGameday() {
 }
 
 // ---------- games ----------
-const UI = {gameWeek: null, gameID: null, playerQ: '', teamQ: '', team: null, byeCell: null, showAllBox: false};
+const UI = {gameWeek: null, gameID: null, playerQ: '', teamQ: '', team: null, byeCell: null, showAllBox: false,
+  pos: 'ALL', freeOnly: false};
 const gamesWeek = () => UI.gameWeek || S.week;
 function gamesFor(wk) {
   const live = S.scores[wk] || [];
@@ -762,21 +935,41 @@ const TEAM_FULL = {};
 function teamFull(abbr) { const d = S.players[abbr]; return (d && d.n) || abbr; }
 
 // ---------- players ----------
+/** Set of players rostered by anyone, per league — cheaper than ownership() inside a filter loop. */
+function rosteredSets() {
+  return S.leagues.map(lg => {
+    const s = new Set();
+    lg.rosters.forEach(r => (r.players || []).forEach(p => s.add(p)));
+    return s;
+  });
+}
 function searchPlayers(q, limit) {
   const s = q.trim().toLowerCase();
   const ids = Object.keys(S.players);
-  const hits = s ? ids.filter(id => { const p = S.players[id];
+  let hits = s ? ids.filter(id => { const p = S.players[id];
       return p.n.toLowerCase().includes(s) || (p.t || '').toLowerCase() === s; })
     : ids.filter(id => S.players[id].t);
+  if (UI.pos !== 'ALL') hits = hits.filter(id => S.players[id].p === UI.pos);
+  if (UI.freeOnly && S.leagues.length) {
+    const sets = rosteredSets();
+    hits = hits.filter(id => sets.some(set => !set.has(id)));
+  }
   return hits.sort((a, b) => S.players[a].r - S.players[b].r).slice(0, limit);
 }
+const POS_CHIPS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'];
 function viewPlayers() {
   const res = searchPlayers(UI.playerQ, 60);
+  const chips = `<div style="display:flex;flex-wrap:wrap;gap:8px;padding:0 18px 14px">
+    ${POS_CHIPS.map(p => `<button class="weekpill txt ${UI.pos === p ? 'on' : ''}" data-act="posfilter" data-pos="${p}">${p}</button>`).join('')}
+    <button class="weekpill txt mint ${UI.freeOnly ? 'on' : ''}" data-act="freeonly"
+      style="margin-left:auto">${UI.freeOnly ? '● ' : ''}Free agents</button></div>`;
   const left = `<div>${header('Players', `${Object.keys(S.players).length.toLocaleString()} in the database`)}
     ${panel(`<div class="searchbar"><span class="dim">⌕</span>
       <input id="psearch" placeholder="Search players" value="${esc(UI.playerQ)}" autocapitalize="none" autocorrect="off">
-      ${UI.playerQ ? `<button class="btn accent" style="padding:6px 12px" data-act="clearsearch">Clear</button>` : ''}</div>`)}
-    ${panel(`${headRow(UI.playerQ ? `${res.length} results` : 'Top players')}
+      ${UI.playerQ ? `<button class="btn accent" style="padding:6px 12px" data-act="clearsearch">Clear</button>` : ''}</div>
+      ${chips}`)}
+    ${panel(`${headRow(UI.playerQ ? `${res.length} results` : 'Top players',
+        UI.pos !== 'ALL' || UI.freeOnly ? `<span class="dim" style="font-size:12px">${esc([UI.pos !== 'ALL' ? UI.pos : null, UI.freeOnly ? 'free somewhere' : null].filter(Boolean).join(' · '))}</span>` : '')}
       <div class="scroll" style="max-height:min(62vh,720px)">${res.map(id => {
         const p = S.players[id];
         return `<div class="rowline selrow ${id === UI.player ? 'on' : ''}" data-select-player="${esc(id)}"
@@ -800,6 +993,7 @@ function playerPanel(pid) {
   const p = P(pid); if (!p) return '';
   const owners = ownAll(pid);
   const wkStats = S.playerWeeks[pid];
+  const projWks = S.playerProj[pid] || {};
   const news = S.newsCache[pid];
   const watched = S.watch.includes(pid);
   const played = wkStats ? Object.keys(wkStats).map(Number).sort((a, b) => a - b) : [];
@@ -838,7 +1032,7 @@ function playerPanel(pid) {
           <span class="dim" style="font-size:12px;white-space:nowrap">${ago(n.when)}</span></div>
         <div class="muted" style="font-size:14px;margin-top:4px">${esc(n.d)}</div>
         ${n.a ? `<div class="dim" style="font-size:13px;margin-top:4px">${esc(n.a)}</div>` : ''}</div>`).join('')}`) : ''}
-    ${panel(`${headRow('Points by week', '<span class="thead">per-league scoring</span>')}
+    ${panel(`${headRow('Points by week', `<span class="thead">per-league scoring · <span style="color:${T.amber}">proj</span> from wk ${S.week + 1}</span>`)}
       ${!wkStats ? `<div style="padding:24px;text-align:center">${spinner}</div>` : `
       <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:14px">
         <thead><tr><th class="thead" style="text-align:left;padding:8px 20px">Week</th>
@@ -848,10 +1042,15 @@ function playerPanel(pid) {
           const st = wkStats[w] && wkStats[w].stats;
           const bye = p.t && byeTeams(w).has(p.t);
           const cur = w === S.week, future = w > S.week;
+          const pj = future && projWks[w];
           return `<tr style="${cur ? `background:${T.cyan}14` : (bye ? `background:${T.amber}0d` : '')};border-top:1px solid var(--div)">
             <td class="num" style="padding:8px 20px;font-weight:600;${future ? 'opacity:.4' : ''}">Wk ${w}</td>
             <td class="muted" style="padding:8px 8px;${future ? 'opacity:.4' : ''}">${esc(bye ? '—' : ((wkStats[w] && wkStats[w].opponent) || oppLabel(p.t, w)))}</td>
-            ${S.leagues.map(lg => `<td class="num" style="padding:8px 14px;text-align:right;font-weight:600;${bye ? `color:${T.amber}bf` : (st ? '' : 'opacity:.3')}">${bye ? 'BYE' : (st ? pts(scoreOf(st, scoringOf(lg))) : '—')}</td>`).join('')}
+            ${S.leagues.map(lg => {
+              const style = bye ? `color:${T.amber}bf` : (st ? '' : (pj ? 'opacity:.4' : 'opacity:.3'));
+              const val = bye ? 'BYE' : (st ? pts(scoreOf(st, scoringOf(lg))) : (pj ? pts(scoreOf(pj, scoringOf(lg))) : '—'));
+              return `<td class="num" style="padding:8px 14px;text-align:right;font-weight:600;${style}">${val}</td>`;
+            }).join('')}
           </tr>${st && statSummary(st, p.p) ? `<tr><td colspan="${2 + S.leagues.length}" class="muted" style="padding:0 20px 8px;font-size:12px">${esc(statSummary(st, p.p))}</td></tr>` : ''}`;
         }).join('')}</tbody>
         <tfoot><tr style="border-top:1px solid var(--div3)"><td class="thead" style="padding:10px 20px">Avg</td><td></td>
@@ -889,17 +1088,18 @@ function viewLeagues() {
   };
   const grid = `<div style="display:grid;grid-template-columns:170px repeat(${S.leagues.length}, minmax(0,1fr))">
     <div></div>${S.leagues.map(lg => { const hl = health(lg);
-      return `<div style="padding:22px 24px;border-left:1px solid rgba(255,255,255,.08)">
-        <div style="font-size:21px;font-weight:700;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${esc(lg.name)}</div>
+      return `<button data-league="${esc(lg.id)}" class="selrow" style="display:block;width:100%;text-align:left;padding:22px 24px;border-left:1px solid rgba(255,255,255,.08)">
+        <div style="font-size:21px;font-weight:700;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${esc(lg.name)} <span class="dim" style="font-size:15px">›</span></div>
         <div class="muted" style="font-size:14px">${esc(lg.myRosterID ? teamName(lg, lg.myRosterID) : '—')}</div>
-        <div style="margin-top:8px">${statusPill(hl.label, hl.color)}</div></div>`; }).join('')}
+        <div style="margin-top:8px">${statusPill(hl.label, hl.color)}</div></button>`; }).join('')}
     ${rows.map(r => `<div class="thead" style="padding:22px 0 22px 24px;border-top:1px solid rgba(255,255,255,.07);display:flex;align-items:center">${esc(r)}</div>
       ${S.leagues.map(lg => `<div style="padding:18px 24px;border-top:1px solid rgba(255,255,255,.07);border-left:1px solid rgba(255,255,255,.08);display:flex;align-items:center;min-width:0">${cell(r, lg)}</div>`).join('')}`).join('')}
   </div>`;
   const cards = S.leagues.map(lg => { const hl = health(lg);
-    return panel(`<div style="padding:18px 20px"><div style="font-size:20px;font-weight:700">${esc(lg.name)}</div>
+    return panel(`<button data-league="${esc(lg.id)}" class="selrow" style="display:block;width:100%;text-align:left;padding:18px 20px">
+      <div style="font-size:20px;font-weight:700">${esc(lg.name)} <span class="dim" style="font-size:15px">›</span></div>
       <div class="muted" style="font-size:14px">${esc(lg.myRosterID ? teamName(lg, lg.myRosterID) : '—')}</div>
-      <div style="margin-top:8px">${statusPill(hl.label, hl.color)}</div></div>
+      <div style="margin-top:8px">${statusPill(hl.label, hl.color)}</div></button>
       ${rows.map(r => `<div style="display:flex;gap:12px;align-items:center;padding:12px 20px;border-top:1px solid rgba(255,255,255,.07)">
         <span class="thead" style="width:96px;flex:none">${esc(r)}</span><div style="min-width:0">${cell(r, lg)}</div></div>`).join('')}`); }).join('');
   return `<div class="wrap">${header('Leagues', `Through week ${Math.max(1, S.week - 1)} · ${S.leagues.length} leagues`,
@@ -1033,20 +1233,116 @@ function viewByes() {
 }
 
 // ---------- watch ----------
+const FRESH_FREE = 48 * 3600 * 1000;
 function viewWatch() {
-  const items = S.watch;
-  return `<div class="wrap">${header('Watchlist', `${items.length} player${items.length === 1 ? '' : 's'}`)}
+  // Whatever flipped most recently goes to the top; everything else keeps its insertion order.
+  const ch = S.watchChanges || {};
+  const items = [...S.watch].sort((a, b) => ((ch[b] && ch[b].at) || 0) - ((ch[a] && ch[a].at) || 0));
+  const changed = Object.keys(ch).filter(pid => S.watch.includes(pid)).length;
+  return `<div class="wrap">${header('Watchlist', `${items.length} player${items.length === 1 ? '' : 's'}${changed ? ` · ${changed} changed` : ''}`)}
     ${panel(items.length ? items.map(pid => { const p = P(pid); if (!p) return '';
-      const states = ownAll(pid), free = states.some(s => s.o.k === 'free');
-      return `<div class="rowline" style="display:flex;gap:12px;align-items:center;padding:13px 20px;${free ? `background:${T.mint}1a;box-shadow:inset 3px 0 0 ${T.mint}` : ''}">
+      const states = ownAll(pid);
+      const c = ch[pid];
+      // The mint highlight now means "freed up recently", not merely "unrostered somewhere".
+      const hot = !!(c && c.free && Date.now() - c.at < FRESH_FREE);
+      return `<div class="rowline" style="display:flex;gap:12px;align-items:center;padding:13px 20px;${hot ? `background:${T.mint}1a;box-shadow:inset 3px 0 0 ${T.mint}` : ''}">
         ${posBadge(p.p, 12)}
         <div style="flex:1;min-width:0" data-player="${esc(pid)}" class="selrow">
           <div style="font-weight:600">${esc(p.n)} <span class="num muted" style="font-size:13px">${esc(p.t || 'FA')}</span></div>
-          <div style="font-size:13px;color:${p.i ? injColor(p.i) : 'rgba(238,242,248,.47)'}">${esc(p.i || 'Healthy')}</div></div>
+          <div style="font-size:13px;color:${p.i ? injColor(p.i) : 'rgba(238,242,248,.47)'}">${esc(p.i || 'Healthy')}</div>
+          <div style="font-size:13px;margin-top:2px;color:${c ? (c.free ? T.mint : T.amber) : 'rgba(238,242,248,.35)'}">
+            ${c ? `${esc(c.note)} · ${ago(c.at)}` : 'No change since you added him'}</div></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;max-width:60%">${states.map(({o}) => ownPill(o)).join('')}</div>
         <button class="btn" style="padding:6px 12px" data-act="unwatch" data-pid="${esc(pid)}">Remove</button></div>`; }).join('')
-      : `<p class="muted" style="padding:28px 20px;margin:0">Nothing tracked yet. Open a player and tap Watch. Anyone who becomes a free agent in a league is highlighted here.</p>`)}
+      : `<p class="muted" style="padding:28px 20px;margin:0">Nothing tracked yet. Open a player and tap Watch. Anyone who becomes a free agent in a league is highlighted here for 48 hours, and notified if you allow it.</p>`)}
   </div>`;
+}
+
+// ---------- league / roster sheets ----------
+/** One roster, starters (with their slot badge and this week's points) then bench. */
+function rosterListHTML(lg, rosterID) {
+  const r = lg.rosters.find(x => x.roster_id === rosterID) || {};
+  const m = lg.matchups.find(x => x.roster_id === rosterID) || {};
+  const starters = realStarters(m.starters ? m : {starters: r.starters});
+  const slots = (lg.league.roster_positions || []).filter(s => !['BN', 'IR', 'TAXI'].includes(s));
+  const pp = m.players_points || {};
+  const bench = (r.players || []).filter(p => !starters.includes(p));
+  const row = (pid, slot) => {
+    const started = isLive(pid, S.week) || isOver(pid, S.week);
+    const pr = projPoints(pid, S.week, lg);
+    const val = started && pp[pid] != null ? pts(pp[pid]) : (pr != null ? pts(pr) : '—');
+    const p = P(pid);
+    const lab = slot ? slotLabel(slot) : 'BN';
+    return `<div class="rowline selrow" data-player="${esc(pid)}" style="display:flex;align-items:center;gap:10px;padding:9px 20px">
+      <span style="width:94px;flex:none;display:flex;gap:6px;align-items:center">
+        <span class="pos" style="min-width:42px;background:rgba(238,242,248,.12);color:rgba(238,242,248,.72);font-size:11px">${esc(lab)}</span>
+        ${lab === ppos(pid) ? '' : posBadge(ppos(pid), 11)}</span>
+      <div style="flex:1;min-width:0"><div style="font-weight:600;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${esc(pname(pid))}</div>
+        <div class="muted" style="font-size:12px">${esc(pteam(pid) || 'FA')} · ${esc(clockFor(pteam(pid), S.week))}${p && p.i ? ` · <span style="color:${injColor(p.i)}">${esc(p.i)}</span>` : ''}</div></div>
+      <span class="num" style="font-size:17px;font-weight:700;width:56px;text-align:right;${started ? '' : 'opacity:.45'}">${val}</span></div>`;
+  };
+  return `${headRow('Starters', `<span class="thead">${pts(starters.reduce((t, p) => t + (pp[p] || 0), 0))} pts</span>`)}
+    ${starters.length ? starters.map((pid, i) => row(pid, slots[i])).join('') : `<p class="muted" style="padding:14px 20px;margin:0">No lineup set.</p>`}
+    ${bench.length ? `${headRow('Bench')}${bench.map(pid => row(pid, null)).join('')}` : ''}`;
+}
+
+function rosterSheetHTML(lg, rosterID) {
+  return `${sheetBar()}${panel(`<div style="padding:16px 20px 4px">
+      <div class="thead">${esc(lg.name)}</div>
+      <div style="font-size:24px;font-weight:700">${esc(teamName(lg, rosterID))}</div></div>
+    ${rosterListHTML(lg, rosterID)}`)}`;
+}
+
+const TX_LABEL = {waiver: 'waiver', free_agent: 'free agent', trade: 'trade', commissioner: 'commissioner'};
+function txHTML(lg) {
+  const list = S.tx[lg.id];
+  if (list === undefined) return `<div style="padding:22px;text-align:center">${spinner}</div>`;
+  if (!list.length) return `<p class="muted" style="padding:16px 20px;margin:0">No completed moves in week ${S.week}.</p>`;
+  return list.slice(0, 30).map(t => {
+    const lines = [];
+    for (const pid in (t.adds || {})) lines.push({s: '+', c: T.mint, pid, arrow: '→', rid: t.adds[pid]});
+    for (const pid in (t.drops || {})) lines.push({s: '−', c: T.coral, pid, arrow: '←', rid: t.drops[pid]});
+    return `<div class="rowline" style="padding:10px 20px">
+      <div style="display:flex;gap:8px;align-items:baseline">
+        <span class="thead" style="flex:1">${esc(TX_LABEL[t.type] || t.type || 'move')}</span>
+        <span class="dim" style="font-size:12px;white-space:nowrap">${ago(t.created)}</span></div>
+      ${lines.map(l => `<div data-player="${esc(l.pid)}" class="selrow" style="display:flex;gap:8px;align-items:baseline;font-size:14px;padding:2px 0;cursor:pointer">
+        <b class="num" style="color:${l.c};width:12px">${l.s}</b>
+        <span style="flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${esc(pname(l.pid))}
+          <span class="dim">${esc(l.arrow)} ${esc(teamName(lg, l.rid))}</span></span></div>`).join('')}
+    </div>`;
+  }).join('');
+}
+
+function leagueSheetHTML(lid) {
+  const lg = S.leagues.find(l => l.id === lid);
+  if (!lg) return `${sheetBar()}${panel(`<p class="muted" style="padding:20px;margin:0">League not loaded.</p>`)}`;
+  const st = standings(lg), hl = health(lg);
+  const manager = rid => { const r = lg.rosters.find(x => x.roster_id === rid);
+    const u = r && lg.users.find(u => u.user_id === r.owner_id); return (u && u.display_name) || ''; };
+  const rows = st.map(r => `<tr style="border-top:1px solid var(--div);${r.isMine ? `background:${T.cyan}14` : ''}">
+      <td class="num" style="padding:8px 20px;font-weight:700;${r.isMine ? `color:${T.cyan}` : ''}">${r.rank}</td>
+      <td style="padding:8px 8px;min-width:0">
+        <button data-roster="${esc(lg.id)}|${esc(r.rosterID)}" style="padding:0;text-align:left;font-weight:600;${r.isMine ? `color:${T.cyan}` : ''};text-decoration:underline;text-decoration-color:var(--div3)">${esc(r.name)}</button>
+        <div class="dim" style="font-size:12px">${esc(manager(r.rosterID))}</div></td>
+      <td class="num" style="padding:8px 10px;text-align:right;font-weight:600">${r.wins}-${r.losses}${r.ties ? '-' + r.ties : ''}</td>
+      <td class="num" style="padding:8px 10px;text-align:right">${pts(r.pf)}</td>
+      <td class="num" style="padding:8px 20px;text-align:right;opacity:.6">${pts(r.pa)}</td></tr>`).join('');
+  return `${sheetBar()}
+    ${panel(`<div style="padding:18px 20px 6px;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap">
+      <b style="font-size:22px;flex:1;min-width:0">${esc(lg.name)}</b>${statusPill(hl.label, hl.color)}
+      <span class="dim" style="font-size:13px;width:100%">${esc(scoringNote(lg))} · ${lg.rosters.length} teams · ${playoffSeats(lg)} playoff seats</span></div>
+      <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:14px">
+        <thead><tr><th class="thead" style="text-align:left;padding:8px 20px">#</th>
+          <th class="thead" style="text-align:left;padding:8px 8px">Team</th>
+          <th class="thead" style="text-align:right;padding:8px 10px">W-L</th>
+          <th class="thead" style="text-align:right;padding:8px 10px">PF</th>
+          <th class="thead" style="text-align:right;padding:8px 20px">PA</th></tr></thead>
+        <tbody>${rows}</tbody></table></div>`)}
+    ${lg.myRosterID != null ? panel(`<div style="padding:14px 20px 2px"><b style="font-size:17px">My roster</b>
+      <span class="muted" style="font-size:13px"> · ${esc(teamName(lg, lg.myRosterID))}</span></div>
+      ${rosterListHTML(lg, lg.myRosterID)}`, '', 'margin-top:14px') : ''}
+    ${panel(`${headRow('Recent activity', `<span class="dim" style="font-size:12px">week ${S.week}</span>`)}${txHTML(lg)}`, '', 'margin-top:14px')}`;
 }
 
 // ---------- conflicts sheet ----------
@@ -1105,14 +1401,51 @@ function render() {
   renderTabs();
 }
 
-function openSheet(html) { const d = $('#sheet'); d.innerHTML = `<div style="padding:8px">${html}</div>`; if (!d.open) d.showModal(); }
-function openPlayer(pid) {
-  openSheet(`<div style="display:flex;justify-content:flex-end;padding-bottom:8px">
-    <button class="btn" data-act="closesheet">Close</button></div>${playerPanel(pid)}`);
-  Promise.all([loadPlayerWeeks(pid), loadNews(pid)]).then(() => {
-    if ($('#sheet').open) openSheet(`<div style="display:flex;justify-content:flex-end;padding-bottom:8px">
-      <button class="btn" data-act="closesheet">Close</button></div>${playerPanel(pid)}`);
+/* One <dialog> serves every sheet, so drilling in (league → player) replaces its content. A
+   one-level stack keeps a "Back" that restores the sheet you came from. */
+function paintSheet(html) {
+  S.sheetCur = html;
+  const d = $('#sheet');
+  d.innerHTML = `<div style="padding:8px">${html}</div>`;
+  if (!d.open) d.showModal();
+  d.firstChild.scrollTop = 0;
+}
+function sheetBar(extra) {
+  return `<div style="display:flex;gap:8px;justify-content:flex-end;padding-bottom:8px">
+    ${extra || ''}${S.sheetStack.length ? `<button class="btn" data-act="sheetback">← Back</button>` : ''}
+    <button class="btn" data-act="closesheet">Close</button></div>`;
+}
+/** sub: keep the sheet we're standing on so Back can return to it. */
+function openSheet(html, sub) {
+  S.sheetStack = sub && S.sheetCur ? [S.sheetCur] : [];
+  S.sheetToken++;
+  paintSheet(html);
+}
+function popSheet() {
+  const prev = S.sheetStack.pop();
+  S.sheetToken++;
+  if (prev) paintSheet(prev); else $('#sheet').close();
+}
+function openPlayer(pid, sub) {
+  S.sheetStack = sub && S.sheetCur ? [S.sheetCur] : [];
+  const token = ++S.sheetToken;
+  const build = () => sheetBar() + playerPanel(pid);
+  paintSheet(build());
+  Promise.all([loadPlayerWeeks(pid), loadPlayerProj(pid), loadNews(pid)]).then(() => {
+    if ($('#sheet').open && token === S.sheetToken) paintSheet(build());
   });
+}
+function openLeague(lid) {
+  const token = ++S.sheetToken;
+  S.sheetStack = [];
+  paintSheet(leagueSheetHTML(lid));
+  loadTx(lid).then(() => { if ($('#sheet').open && token === S.sheetToken) paintSheet(leagueSheetHTML(lid)); });
+}
+function openRoster(lid, rosterID, sub) {
+  const lg = S.leagues.find(l => l.id === lid); if (!lg) return;
+  S.sheetStack = sub && S.sheetCur ? [S.sheetCur] : [];
+  S.sheetToken++;
+  paintSheet(rosterSheetHTML(lg, Number(rosterID)));
 }
 
 // ---------- gameday loop ----------
@@ -1120,6 +1453,7 @@ function setGameday(on) {
   S.gameday = on;
   if (S.gamedayTimer) { clearInterval(S.gamedayTimer); S.gamedayTimer = null; }
   if (on) {
+    S.lastLiveAt = Date.now();   // gives the idle-out timer a starting point
     tickGameday();
     S.gamedayTimer = setInterval(tickGameday, 45000);
     keepAwake(true);
@@ -1150,17 +1484,77 @@ async function keepAwake(on) {
     else if (wakeLock) { await wakeLock.release(); wakeLock = null; }
   } catch {}
 }
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S.gameday) keepAwake(true); });
+// ---------- gameday auto-activation ----------
+const OVERRIDE_MS = 6 * 3600 * 1000;   // a manual exit wins for the rest of the afternoon
+const IDLE_OFF_MS = 15 * 60 * 1000;    // nothing live or imminent for this long → step back out
+const IMMINENT_MS = 30 * 60 * 1000;    // "about to kick off"
+
+/** Every starter in play this week: mine and my opponents', across all leagues. */
+function relevantStarters() {
+  const out = new Set();
+  for (const lg of S.leagues) {
+    realStarters(myMatchup(lg)).forEach(p => out.add(p));
+    realStarters(oppMatchup(lg)).forEach(p => out.add(p));
+  }
+  return [...out];
+}
+function gamedaySignal() {
+  const now = Date.now();
+  let live = false, imminent = false;
+  for (const pid of relevantStarters()) {
+    if (isLive(pid, S.week)) { live = true; continue; }
+    if (isOver(pid, S.week)) continue;
+    const sg = scoreGame(pteam(pid), S.week);
+    const k = sg && sg.m && sg.m.date_time ? Date.parse(sg.m.date_time) : NaN;
+    if (Number.isFinite(k) && k - now > 0 && k - now <= IMMINENT_MS) imminent = true;
+  }
+  return {live, imminent};
+}
+function shouldAutoGameday() {
+  if (!S.autoGameday || !S.leagues.length) return false;
+  if (Date.now() < (S.gamedayOverrideUntil || 0)) return false;
+  if (S.seasonType !== 'regular' && S.seasonType !== 'post') return false;
+  const sig = gamedaySignal();
+  if (sig.live || sig.imminent) return true;
+  const d = new Date();
+  return d.getDay() === 0 && d.getHours() >= 10;
+}
+async function autoTick() {
+  if (!S.leagues.length) return;
+  if (!S.gameday) { try { await loadScores(false); } catch {} }   // gameday's own poll covers the on case
+  const sig = gamedaySignal();
+  if (sig.live || sig.imminent) S.lastLiveAt = Date.now();
+  if (S.gameday) {
+    if (!sig.live && !sig.imminent && S.lastLiveAt && Date.now() - S.lastLiveAt > IDLE_OFF_MS) {
+      setGameday(false);
+      toast('Gameday off — nothing live');
+    }
+    return;
+  }
+  if (S.tab === 'matchups' && shouldAutoGameday()) { setGameday(true); toast('Gameday'); }
+  else if (S.tab === 'matchups') render();   // keeps the "paused" label and clocks honest
+}
+function startAutoTimer() { if (!S.autoTimer) S.autoTimer = setInterval(autoTick, 60000); }
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  if (S.gameday) { keepAwake(true); tickGameday(); }
+  autoTick();
+});
 
 // ---------- events ----------
 document.addEventListener('click', async e => {
   const tab = e.target.closest('[data-tab]');
   if (tab) { S.tab = tab.dataset.tab; if (S.tab !== 'matchups') setGamedayQuiet(false); render(); afterTab(); return; }
+  const lgx = e.target.closest('[data-league]');
+  if (lgx) { openLeague(lgx.dataset.league); return; }
+  const rst = e.target.closest('[data-roster]');
+  if (rst) { const [lid, rid] = rst.dataset.roster.split('|'); openRoster(lid, rid, $('#sheet').open); return; }
   const pl = e.target.closest('[data-player]');
-  if (pl && pl.dataset.player) { openPlayer(pl.dataset.player); return; }
+  if (pl && pl.dataset.player) { openPlayer(pl.dataset.player, $('#sheet').open); return; }
   const sp = e.target.closest('[data-select-player]');
   if (sp) { UI.player = sp.dataset.selectPlayer; render();
-    await Promise.all([loadPlayerWeeks(UI.player), loadNews(UI.player)]); render(); return; }
+    await Promise.all([loadPlayerWeeks(UI.player), loadPlayerProj(UI.player), loadNews(UI.player)]); render(); return; }
   const gm = e.target.closest('[data-game]');
   if (gm) { UI.gameID = gm.dataset.game; UI.showAllBox = false; render();
     const g = gamesFor(gamesWeek()).find(x => x.game_id === UI.gameID);
@@ -1183,13 +1577,33 @@ document.addEventListener('click', async e => {
   const a = act.dataset.act;
   if (a === 'refresh') { await fullSync(false); afterTab(); }
   else if (a === 'onboard') await onboard();
-  else if (a === 'gameday-on') setGameday(true);
-  else if (a === 'gameday-off') setGameday(false);
+  else if (a === 'gameday-on') {
+    S.gamedayOverrideUntil = 0; LS.set('gamedayOverrideUntil', 0);
+    setGameday(true);
+  }
+  else if (a === 'gameday-off') {
+    // A deliberate exit outranks the auto rule for the rest of the afternoon.
+    S.gamedayOverrideUntil = Date.now() + OVERRIDE_MS;
+    LS.set('gamedayOverrideUntil', S.gamedayOverrideUntil);
+    setGameday(false);
+  }
+  else if (a === 'toggle-auto') {
+    S.autoGameday = !S.autoGameday; LS.set('autoGameday', S.autoGameday);
+    if (S.autoGameday) { S.gamedayOverrideUntil = 0; LS.set('gamedayOverrideUntil', 0); }
+    toast(S.autoGameday ? 'Gameday will open on its own' : 'Auto-start off');
+    render();
+  }
   else if (a === 'watch') { const p = act.dataset.pid;
-    if (!S.watch.includes(p)) S.watch.unshift(p); else S.watch = S.watch.filter(x => x !== p);
-    LS.set('watch', S.watch); toast(S.watch.includes(p) ? 'Added to watchlist' : 'Removed');
-    if ($('#sheet').open) openPlayer(p); else render(); }
-  else if (a === 'unwatch') { S.watch = S.watch.filter(x => x !== act.dataset.pid); LS.set('watch', S.watch); render(); }
+    const adding = !S.watch.includes(p);
+    if (adding) { askNotify(); S.watch.unshift(p); }
+    else S.watch = S.watch.filter(x => x !== p);
+    LS.set('watch', S.watch); trackWatch(false); toast(adding ? 'Added to watchlist' : 'Removed');
+    if ($('#sheet').open) paintSheet(sheetBar() + playerPanel(p)); else render(); }
+  else if (a === 'unwatch') { S.watch = S.watch.filter(x => x !== act.dataset.pid);
+    LS.set('watch', S.watch); trackWatch(false); render(); }
+  else if (a === 'sheetback') popSheet();
+  else if (a === 'posfilter') { UI.pos = act.dataset.pos; render(); }
+  else if (a === 'freeonly') { UI.freeOnly = !UI.freeOnly; render(); }
   else if (a === 'clearsearch') { UI.playerQ = ''; render(); }
   else if (a === 'showallbox') { UI.showAllBox = true; render(); }
   else if (a === 'signout') {
@@ -1218,9 +1632,9 @@ async function afterTab() {
   }
 }
 
-async function onboard() {
+async function onboard(override) {
   const input = $('#uname');
-  const name = (input ? input.value : S.username).trim();
+  const name = (override || (input ? input.value : S.username) || '').trim();
   if (!name) return;
   S.syncing = true; S.error = null; S.syncMsg = 'Looking up ' + name + '…'; render();
   try {
@@ -1229,22 +1643,62 @@ async function onboard() {
     LS.set('userID', S.userID); LS.set('username', name);
     S.syncing = false;
     await fullSync(true);
-    if (!S.error) { S.tab = 'matchups'; render(); }
+    if (!S.error) { S.tab = 'matchups'; startAutoTimer(); render(); }
   } catch (e) {
     S.error = e.message === 'not found' ? `No Sleeper account called “${name}”.` : (e.message || String(e));
     S.syncing = false; S.syncMsg = ''; render();
   }
 }
 
+/* ---------- dev/deep-link hooks ----------
+   ?user=<sleeper name>  auto-onboards when nothing is stored (headless screenshots have no localStorage)
+   ?tab=<matchups|players|games|leagues|teams|byes|watch>
+   ?player=<id>  ?game=<TEAM>  ?league=<id>  ?gameday=1
+   ?watch=<id,id>  seeds the watchlist for this page load only (not persisted)                  */
+async function applyHooks(q) {
+  if (!S.leagues.length) return;
+  const w = q.get('watch');
+  if (w) { S.watch = w.split(',').map(x => x.trim()).filter(Boolean); trackWatch(false); }
+  const t = q.get('tab');
+  if (t && TABS.some(x => x[0] === t)) S.tab = t;
+  if (q.get('gameday') === '1') { S.tab = 'matchups'; setGameday(true); return; }
+  // An explicit deep link means "show me this screen", so don't let the auto rule swap it out.
+  if (t || q.get('player') || q.get('game') || q.get('league')) setGamedayQuiet(false);
+  const pid = q.get('player');
+  if (pid) {
+    if (!t) S.tab = 'players';
+    UI.player = pid; render();
+    await Promise.all([loadPlayerWeeks(pid), loadPlayerProj(pid), loadNews(pid)]);
+  }
+  const team = q.get('game');
+  if (team) {
+    if (!t) S.tab = 'games';
+    const wk = gamesWeek();
+    if (!S.scores[wk]) { try { S.scores[wk] = (await api.scores(S.season, wk)).map(slimGame); } catch {} }
+    const g = gamesFor(wk).find(x => gHome(x) === team || gAway(x) === team);
+    if (g) {
+      UI.gameID = g.game_id; render();
+      await loadBoxScores(wk); loadGameNews(g);
+      try { S.plays[g.game_id] = await api.plays(S.season, wk, g.game_id); } catch {}
+    }
+  }
+  render();
+  const lid = q.get('league');
+  if (lid) { openLeague(lid); return; }
+  afterTab();
+}
+
 // ---------- boot ----------
 (async function init() {
   UI.player = null;
+  const q = new URLSearchParams(location.search);
   render();
-  if (S.userID) {
-    await fullSync(false);
-    // Sunday during the season opens gameday automatically, same rule as the app.
-    const d = new Date();
-    if (S.leagues.length && d.getDay() === 0 && d.getHours() >= 10 && S.seasonType === 'regular') setGameday(true);
+  if (!S.userID && q.get('user')) { S.username = q.get('user'); await onboard(q.get('user')); }
+  else if (S.userID) await fullSync(false);
+  if (S.leagues.length) {
+    startAutoTimer();
+    if (shouldAutoGameday()) setGameday(true);
     afterTab();
   }
+  await applyHooks(q);
 })();
