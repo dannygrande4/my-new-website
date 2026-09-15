@@ -7,10 +7,17 @@
 <title>FF Consolidator</title>
 <meta name="description" content="All your Sleeper leagues on one screen.">
 <script>
-/* Served at a directory path without a trailing slash (e.g. /ff), relative asset URLs would
-   resolve against the parent (/app.js) and 404. Normalise to /ff/ before anything else loads. */
-(function(){var p=location.pathname;if(p!=='/'&&!p.endsWith('/')&&!/\.[a-z0-9]+$/i.test(p)){
-  location.replace(p+'/'+location.search+location.hash);}})();
+/* The page may be served at /ff (no trailing slash), where relative URLs would resolve against
+   the parent and 404. Hosts that strip trailing slashes make a redirect impossible, so set a
+   <base> from the document path instead. Must run before the link/script tags below are parsed. */
+(function () {
+  var p = location.pathname;
+  var base = /\.[a-z0-9]+$/i.test(p) ? p.replace(/[^\/]*$/, '')
+           : (p.charAt(p.length - 1) === '/' ? p : p + '/');
+  var b = document.createElement('base');
+  b.href = base;
+  document.head.appendChild(b);
+})();
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
