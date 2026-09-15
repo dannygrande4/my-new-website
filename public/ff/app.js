@@ -565,18 +565,46 @@ const syncLine = () => S.syncing ? `<span class="sub">${spinner} ${esc(S.syncMsg
 
 // ---------- onboarding ----------
 function viewOnboarding() {
-  return `<div class="wrap">${panel(`
-    <div class="kicker">FFCONSOLIDATOR</div>
-    <h2>Your Sleeper username</h2>
-    <p class="muted" style="font-size:16px;margin:0">All leagues on the account are pulled in. Nothing is written back to Sleeper.</p>
-    <div class="field"><span class="dim" style="font-size:20px">@</span>
-      <input id="uname" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false"
-             placeholder="username" value="${esc(S.username)}"></div>
-    ${S.error ? `<p style="color:${T.coral};font-size:14px;margin:0 0 10px">${esc(S.error)}</p>` : ''}
-    <button class="btn solid" style="width:100%;padding:18px" data-act="onboard">
-      ${S.syncing ? `${spinner} ${esc(S.syncMsg || 'Working…')}` : 'Find my leagues'}</button>
-    <p class="dim" style="text-align:center;font-size:13px;margin:14px 0 0">Season ${esc(S.season)} · read-only, no password needed</p>
-  `, 'modal')}</div>`;
+  const busy = S.syncing;
+  const feature = (icon, title, body) => `<div class="feat"><div class="feat-ic">${icon}</div>
+    <div><div class="feat-t">${title}</div><div class="feat-b">${body}</div></div></div>`;
+  const col = (name, pill, color, you, them, mine, theirs) => `<div class="pv-col" style="border-color:${color}55">
+    <div class="pv-name">${name}</div>
+    <div class="status" style="color:${color};background:${color}33;font-size:11px">${pill}</div>
+    <div class="pv-lbl"><span>YOU</span><span>${you}</span></div>
+    <div class="num pv-score" style="text-shadow:0 0 22px ${color}59">${mine}</div>
+    <div class="pv-lbl dim"><span>THEM</span><span>${them}</span></div>
+    <div class="num pv-score" style="opacity:.45">${theirs}</div></div>`;
+  return `<div class="land">
+    <div class="land-copy">
+      <div class="wordmark"><span class="num">FF</span> Consolidator</div>
+      <h1 class="land-h1">Every Sleeper league.<br>One screen.</h1>
+      <p class="land-p">Built for the couch on Sunday: all your matchups side by side, who owns whom across leagues, and the one player you need to score exactly enough.</p>
+      <div class="feats">
+        ${feature('<svg viewBox="0 0 24 24"><path d="M4 8h13l-3-3M20 16H7l3 3"/></svg>', 'Gameday mode', 'Room-distance scoreboard for every league at once, refreshing every 45 seconds, with live plays as they happen.')}
+        ${feature('<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 4v2M12 18v2M4 12h2M18 12h2"/></svg>', 'Rooting conflicts', 'When your player is starting against you somewhere else, it tells you the score range where you win both.')}
+        ${feature('<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>', 'One lookup, all leagues', 'Search a player and see yours, owned, or free agent in every league, with points under each league\u2019s own scoring.')}
+      </div>
+      <div class="field land-field"><span class="dim" style="font-size:20px">@</span>
+        <input id="uname" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false"
+               placeholder="Sleeper username" value="${esc(S.username)}" ${busy ? 'disabled' : ''}>
+        <button class="btn solid" data-act="onboard" ${busy ? 'disabled' : ''}>${busy ? spinner : 'Open'}</button></div>
+      ${S.error ? `<p style="color:${T.coral};font-size:14px;margin:8px 0 0">${esc(S.error)}</p>` : ''}
+      <p class="dim land-foot">${busy ? esc(S.syncMsg || 'Working…') : `Read-only. Public Sleeper data, no password, nothing written back. Season ${esc(S.season)}.`}</p>
+    </div>
+    <div class="land-preview" aria-hidden="true">
+      <div class="pv-strip"><b>WEEK 8</b><span><i class="live-dot"></i> LIVE · SUN 3:47 PM</span></div>
+      <div class="pv-grid">
+        ${col('Dynasty Degens', 'Leading +14.2', T.mint, '4 left', '3 left', '118.4', '104.2')}
+        ${col('The Long Game', 'Trailing −8.5', T.coral, '2 left', '5 left', '96.1', '104.6')}
+        ${col('Sunday Scaries', 'Toss-up', T.amber, '3 left', '3 left', '87.0', '85.3')}
+      </div>
+      <div class="pv-banner"><i class="dot" style="background:${T.amber};box-shadow:0 0 8px ${T.amber}"></i>
+        <b class="num" style="color:${T.amber};letter-spacing:.08em">ROOTING CONFLICT</b>
+        <span>Bijan Robinson <span class="dim">RB ATL</span></span>
+        <b class="num" style="color:${T.mint}">Want 18.0–27.0 pts</b></div>
+    </div>
+  </div>`;
 }
 
 // ---------- matchups ----------
